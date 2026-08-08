@@ -27,7 +27,7 @@ class ConfigManager(private val storageManager: StorageManager) {
      *
      * @return 应用配置
      */
-    suspend fun getConfig(): AppConfig = withContext(Dispatchers.IO) {
+    suspend fun getConfig(): AppConfig = withContext(Dispatchers.Default) {
         val path = configFilePath()
         if (!storageManager.exists(path)) {
             return@withContext AppConfig()
@@ -44,7 +44,7 @@ class ConfigManager(private val storageManager: StorageManager) {
      * @param config 应用配置
      */
     suspend fun saveConfig(config: AppConfig) {
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.Default) {
             storageManager.writeFile(configFilePath(), JsonUtils.toJson(config))
         }
     }
@@ -55,7 +55,7 @@ class ConfigManager(private val storageManager: StorageManager) {
      * 删除已持久化的配置文件，后续 [getConfig] 将返回默认配置。
      */
     suspend fun resetConfig() {
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.Default) {
             val path = configFilePath()
             if (storageManager.exists(path)) {
                 storageManager.delete(path)

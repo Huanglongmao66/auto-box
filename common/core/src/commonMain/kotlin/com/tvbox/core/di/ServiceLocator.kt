@@ -29,22 +29,16 @@ object ServiceLocator {
     /** 默认网络超时时间（毫秒） */
     private const val DEFAULT_TIMEOUT_MS = 15_000L
 
-    @Volatile
     private var deviceApi: DeviceApi? = null
 
-    @Volatile
     private var database: Database? = null
 
-    @Volatile
     private var historyManager: HistoryManager? = null
 
-    @Volatile
     private var favoriteManager: FavoriteManager? = null
 
-    @Volatile
     private var configManager: ConfigManager? = null
 
-    @Volatile
     private var sourceManager: SourceManager? = null
 
     /**

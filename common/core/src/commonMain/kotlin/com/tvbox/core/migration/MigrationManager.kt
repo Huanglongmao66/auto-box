@@ -26,7 +26,7 @@ class MigrationManager(
      * @return 迁移结果
      */
     suspend fun migrateFromFile(configFilePath: String): DataMigrationTool.MigrationResult {
-        return withContext(Dispatchers.IO) {
+        return withContext(Dispatchers.Default) {
             val configJson = storageManager.readFile(configFilePath)
             if (configJson.isBlank()) {
                 return@withContext DataMigrationTool.MigrationResult(
@@ -140,7 +140,7 @@ class MigrationManager(
      * @return 是否导出成功
      */
     suspend fun exportToFile(filePath: String): Boolean {
-        return withContext(Dispatchers.IO) {
+        return withContext(Dispatchers.Default) {
             try {
                 val json = exportToLegacyJson()
                 storageManager.writeFile(filePath, json)

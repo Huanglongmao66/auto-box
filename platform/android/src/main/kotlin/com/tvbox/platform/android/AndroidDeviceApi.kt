@@ -38,14 +38,14 @@ class AndroidDeviceApi(
 ) : DeviceApi {
 
     /** 跨平台存储管理器，懒加载避免启动期开销 */
-    private val storageManager: StorageManager by lazy { AndroidStorageManager(context) }
+    private val _storageManager: StorageManager by lazy { AndroidStorageManager(context) }
 
     /** 共享 HTTP 客户端 */
     private val httpClient: OkHttpClient by lazy { OkHttpClient.Builder().build() }
 
     // ===== 存储能力 =====
 
-    override fun getStorageManager(): StorageManager = storageManager
+    override fun getStorageManager(): StorageManager = _storageManager
 
     // ===== 播放器能力 =====
 
@@ -214,7 +214,7 @@ class AndroidDeviceApi(
     }
 
     override fun exportLogs(): String {
-        val logFile = File(storageManager.getDocumentDir(), LOG_FILE_NAME)
+        val logFile = File(_storageManager.getDocumentDir(), LOG_FILE_NAME)
         return logFile.absolutePath
     }
 
@@ -227,8 +227,8 @@ class AndroidDeviceApi(
         runCatching {
             val timestamp = SimpleDateFormat(LOG_DATE_FORMAT, Locale.getDefault()).format(Date())
             val line = "$timestamp ${level.name}/$tag: $message\n"
-            storageManager.writeFile(
-                path = File(storageManager.getDocumentDir(), LOG_FILE_NAME).absolutePath,
+            _storageManager.writeFile(
+                path = File(_storageManager.getDocumentDir(), LOG_FILE_NAME).absolutePath,
                 content = line,
                 append = true
             )

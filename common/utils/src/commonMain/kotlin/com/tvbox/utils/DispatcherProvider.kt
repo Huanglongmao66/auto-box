@@ -2,7 +2,6 @@ package com.tvbox.utils
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 
 /**
  * 跨平台协程调度器提供者
@@ -37,7 +36,7 @@ interface DispatcherProvider {
  */
 class DefaultDispatcherProvider : DispatcherProvider {
     override val main: CoroutineDispatcher = Dispatchers.Main
-    override val io: CoroutineDispatcher = Dispatchers.IO
+    override val io: CoroutineDispatcher = Dispatchers.Default
     override val default: CoroutineDispatcher = Dispatchers.Default
     override val unconfined: CoroutineDispatcher = Dispatchers.Unconfined
 }
