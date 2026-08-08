@@ -7,7 +7,6 @@ import com.tvbox.deviceapi.player.TrackType
 import kotlinx.browser.document
 import kotlinx.browser.window
 import org.w3c.dom.HTMLVideoElement
-import org.w3c.dom.events.Event
 
 /**
  * Web 平台播放器实现
@@ -173,16 +172,16 @@ class Html5PlayerImpl : IPlayer {
      * 绑定 HTML5 media 事件，桥接到业务监听器
      */
     private fun bindMediaEvents(video: HTMLVideoElement) {
-        video.addEventListener("loadedmetadata") { _: Event ->
+        video.asDynamic().addEventListener("loadedmetadata") {
             notify { it.onReady() }
             notify { it.onBufferingStateChanged(false) }
         }
-        video.addEventListener("play") { _: Event -> notify { it.onPlay() }; startProgressTimer() }
-        video.addEventListener("pause") { _: Event -> notify { it.onPause() }; stopProgressTimer() }
-        video.addEventListener("ended") { _: Event -> notify { it.onCompletion() }; stopProgressTimer() }
-        video.addEventListener("waiting") { _: Event -> notify { it.onBufferingStateChanged(true) } }
-        video.addEventListener("playing") { _: Event -> notify { it.onBufferingStateChanged(false) } }
-        video.addEventListener("error") { _: Event ->
+        video.asDynamic().addEventListener("play") { notify { it.onPlay() }; startProgressTimer() }
+        video.asDynamic().addEventListener("pause") { notify { it.onPause() }; stopProgressTimer() }
+        video.asDynamic().addEventListener("ended") { notify { it.onCompletion() }; stopProgressTimer() }
+        video.asDynamic().addEventListener("waiting") { notify { it.onBufferingStateChanged(true) } }
+        video.asDynamic().addEventListener("playing") { notify { it.onBufferingStateChanged(false) } }
+        video.asDynamic().addEventListener("error") {
             notify { it.onError(ERROR_CODE_GENERIC, ERROR_MSG_PLAYBACK) }
         }
     }
@@ -219,7 +218,10 @@ class Html5PlayerImpl : IPlayer {
      * 检测浏览器是否原生支持 HLS 播放（Safari）
      */
     private fun canPlayHlsNatively(): Boolean {
-        return video.canPlayType(HLS_MIME_TYPE) != ""
+        // canPlayType 返回 CanPlayTypeResult 枚举，浏览器原生返回字符串
+        // 通过 asDynamic() 绕过 Kotlin 类型系统直接读取原始返回值
+        val result = video.asDynamic().canPlayType(HLS_MIME_TYPE) as? String
+        return result != null && result.isNotEmpty() && result != "no"
     }
 
     /**
