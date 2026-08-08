@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.android.library)
 }
 
 kotlin {
@@ -19,5 +20,17 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlinx.coroutines.test)
         }
+    }
+}
+
+android {
+    namespace = "com.tvbox.utils"
+    compileSdk = 34
+    defaultConfig {
+        minSdk = 21
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 }

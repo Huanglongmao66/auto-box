@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.android.library)
 }
 
 kotlin {
@@ -38,5 +39,17 @@ kotlin {
         linuxX64Main.dependencies {
             implementation(libs.ktor.client.curl)
         }
+    }
+}
+
+android {
+    namespace = "com.tvbox.core"
+    compileSdk = 34
+    defaultConfig {
+        minSdk = 21
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 }
