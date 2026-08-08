@@ -113,7 +113,7 @@ class Html5PlayerImpl : IPlayer {
 
     override fun setSpeed(speed: Float) {
         currentSpeed = speed.coerceIn(SPEED_MIN, SPEED_MAX)
-        video.playbackRate = currentSpeed
+        video.playbackRate = currentSpeed.toDouble()
     }
 
     override fun getSpeed(): Float = currentSpeed
@@ -172,16 +172,16 @@ class Html5PlayerImpl : IPlayer {
      * 绑定 HTML5 media 事件，桥接到业务监听器
      */
     private fun bindMediaEvents(video: HTMLVideoElement) {
-        video.addEventListener("loadedmetadata") {
+        video.addEventListener("loadedmetadata") { _ ->
             notify { it.onReady() }
             notify { it.onBufferingStateChanged(false) }
         }
-        video.addEventListener("play") { notify { it.onPlay() }; startProgressTimer() }
-        video.addEventListener("pause") { notify { it.onPause() }; stopProgressTimer() }
-        video.addEventListener("ended") { notify { it.onCompletion() }; stopProgressTimer() }
-        video.addEventListener("waiting") { notify { it.onBufferingStateChanged(true) } }
-        video.addEventListener("playing") { notify { it.onBufferingStateChanged(false) } }
-        video.addEventListener("error") {
+        video.addEventListener("play") { _ -> notify { it.onPlay() }; startProgressTimer() }
+        video.addEventListener("pause") { _ -> notify { it.onPause() }; stopProgressTimer() }
+        video.addEventListener("ended") { _ -> notify { it.onCompletion() }; stopProgressTimer() }
+        video.addEventListener("waiting") { _ -> notify { it.onBufferingStateChanged(true) } }
+        video.addEventListener("playing") { _ -> notify { it.onBufferingStateChanged(false) } }
+        video.addEventListener("error") { _ ->
             notify { it.onError(ERROR_CODE_GENERIC, ERROR_MSG_PLAYBACK) }
         }
     }
@@ -218,7 +218,7 @@ class Html5PlayerImpl : IPlayer {
      * 检测浏览器是否原生支持 HLS 播放（Safari）
      */
     private fun canPlayHlsNatively(): Boolean {
-        return video.canPlayType(HLS_MIME_TYPE).isNotEmpty()
+        return video.canPlayType(HLS_MIME_TYPE) != ""
     }
 
     /**
