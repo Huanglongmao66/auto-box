@@ -35,5 +35,8 @@ kotlin {
         jsMain.dependencies {
             implementation(libs.ktor.client.js)
         }
+        linuxX64Main.dependencies {
+            implementation(libs.ktor.client.curl)
+        }
     }
 }

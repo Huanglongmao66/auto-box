@@ -1,0 +1,243 @@
+name: Build All Platforms
+
+on:
+  push:
+    branches: [main, dev]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: '构建平台 (all/android/desktop/web/linux-tv)'
+        required: false
+        default: 'all'
+
+env:
+  GRADLE_OPTS: '-Xmx4096M -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8'
+  JAVA_VERSION: '17'
+  JAVA_DISTRIBUTION: 'temurin'
+
+jobs:
+  # ===== 检测代码变更，决定是否需要构建 =====
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          # 手动触发或 tag 推送总是构建
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" || "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          fi
+
+  # ===== Android APK 构建 =====
+  build-android:
+    name: Build Android APK
+    needs: changes
+    if: needs.changes.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.4'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Android Debug APK
+        run: ./gradlew :app:app-android:assembleDebug --no-daemon --stacktrace
+
+      - name: Build Android Release APK
+        run: ./gradlew :app:app-android:assembleRelease --no-daemon --stacktrace
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: tvbox-android-apk
+          path: |
+            app/app-android/build/outputs/apk/debug/*.apk
+            app/app-android/build/outputs/apk/release/*.apk
+          retention-days: 30
+
+  # ===== Desktop (Windows/macOS/Linux) 构建 =====
+  build-desktop:
+    name: Build Desktop (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.should_build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: deb
+            label: Linux
+          - os: windows-latest
+            target: msi
+            label: Windows
+          - os: macos-latest
+            target: dmg
+            label: macOS
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.4'
+
+      - name: Grant execute permission for gradlew
+        if: runner.os != 'Windows'
+        run: chmod +x gradlew
+
+      - name: Build Desktop Distribution
+        shell: bash
+        run: ./gradlew :app:app-desktop:packageDistributionForCurrentOS --no-daemon --stacktrace
+
+      - name: Upload Desktop Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tvbox-desktop-${{ matrix.label }}
+          path: |
+            app/app-desktop/build/compose/binaries/main/**/*.deb
+            app/app-desktop/build/compose/binaries/main/**/*.msi
+            app/app-desktop/build/compose/binaries/main/**/*.dmg
+            app/app-desktop/build/compose/binaries/main/**/*.exe
+          retention-days: 30
+
+  # ===== Web 静态资源构建 =====
+  build-web:
+    name: Build Web (WASM/JS)
+    needs: changes
+    if: needs.changes.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.4'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Web Bundle
+        run: ./gradlew :app:app-web:browserProductionWebpack --no-daemon --stacktrace
+
+      - name: Upload Web Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tvbox-web
+          path: app/app-web/build/dist/js/productionExecutable/**
+          retention-days: 30
+
+  # ===== Linux TV 嵌入式可执行文件构建 =====
+  build-linux-tv:
+    name: Build Linux TV (Native)
+    needs: changes
+    if: needs.changes.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.4'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Linux TV Executable
+        run: ./gradlew :app:app-linux-tv:linkReleaseExecutableLinuxX64 --no-daemon --stacktrace
+
+      - name: Upload Linux TV Executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: tvbox-linux-tv
+          path: app/app-linux-tv/build/bin/linuxX64/releaseExecutable/**
+          retention-days: 30
+
+  # ===== 汇总发布 =====
+  release:
+    name: Publish Release
+    needs: [build-android, build-desktop, build-web, build-linux-tv]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List Artifacts
+        run: find artifacts -type f | head -50
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: TVBox ${{ github.ref_name }}
+          body: |
+            ## TVBox Multiplatform ${{ github.ref_name }}
+
+            ### 下载说明
+            - **Android**: 安装 `.apk` 文件到 Android TV/手机
+            - **Windows**: 下载 `.msi` 或 `.exe` 安装包
+            - **macOS**: 下载 `.dmg` 安装包
+            - **Linux**: 下载 `.deb` 安装包
+            - **Web**: 下载 `tvbox-web` 压缩包，用浏览器打开 `index.html`
+            - **Linux TV**: 下载 `tvbox-linux-tv` 可执行文件，部署到盒子
+
+            ### 构建信息
+            - 构建时间: ${{ github.run_id }}
+            - 提交: ${{ github.sha }}
+          files: |
+            artifacts/**/*.apk
+            artifacts/**/*.deb
+            artifacts/**/*.msi
+            artifacts/**/*.dmg
+            artifacts/**/*.exe
+            artifacts/tvbox-web/**
+            artifacts/tvbox-linux-tv/**
+          draft: false
+          prerelease: false

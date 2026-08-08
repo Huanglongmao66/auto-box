@@ -12,12 +12,15 @@ kotlin {
     }
 
     sourceSets {
-        linuxX64Main.dependencies {
-            implementation(project(":common:core"))
-            implementation(project(":common:device-api"))
-            implementation(project(":common:utils"))
-            implementation(project(":platform:linux-tv"))
-            implementation(project(":feature"))
+        linuxX64Main {
+            kotlin.srcDir("src/main/kotlin")
+            dependencies {
+                implementation(project(":common:core"))
+                implementation(project(":common:device-api"))
+                implementation(project(":common:utils"))
+                implementation(project(":platform:linux-tv"))
+                implementation(project(":feature"))
+            }
         }
     }
 }

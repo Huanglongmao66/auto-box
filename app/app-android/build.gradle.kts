@@ -9,19 +9,22 @@ kotlin {
     androidTarget()
 
     sourceSets {
-        androidMain.dependencies {
-            implementation(project(":common:core"))
-            implementation(project(":common:device-api"))
-            implementation(project(":common:utils"))
-            implementation(project(":common:ui"))
-            implementation(project(":platform:android"))
-            implementation(project(":feature"))
-            implementation(compose.preview)
-            implementation(compose.ui)
-            implementation(compose.foundation)
-            implementation(compose.material3)
-            implementation(libs.media3.exoplayer)
-            implementation("androidx.activity:activity-compose:1.9.3")
+        androidMain {
+            kotlin.srcDir("src/main/kotlin")
+            dependencies {
+                implementation(project(":common:core"))
+                implementation(project(":common:device-api"))
+                implementation(project(":common:utils"))
+                implementation(project(":common:ui"))
+                implementation(project(":platform:android"))
+                implementation(project(":feature"))
+                implementation(compose.preview)
+                implementation(compose.ui)
+                implementation(compose.foundation)
+                implementation(compose.material3)
+                implementation(libs.media3.exoplayer)
+                implementation("androidx.activity:activity-compose:1.9.3")
+            }
         }
     }
 }
