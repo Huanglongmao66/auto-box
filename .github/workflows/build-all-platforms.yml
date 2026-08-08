@@ -153,16 +153,13 @@ jobs:
       - name: Build Web Bundle
         run: ./gradlew :app:app-web:jsBrowserProductionWebpack --no-daemon --stacktrace
 
-      - name: List Web Build Output
-        run: find app/app-web/build -type f 2>/dev/null | head -50
-
       - name: Upload Web Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: tvbox-web
           path: |
-            app/app-web/build/dist/**
-            app/app-web/build/productionExecutable/**
+            app/app-web/build/kotlin-webpack/js/productionExecutable/**
+            app/app-web/build/compose/skiko-for-web-runtime/**
           retention-days: 30
           if-no-files-found: error
 
