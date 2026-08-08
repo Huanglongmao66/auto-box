@@ -12,7 +12,7 @@ kotlin {
                 implementation(project(":common:device-api"))
                 implementation(project(":common:core"))
                 implementation(project(":common:utils"))
-                implementation(libs.ktor.client.okhttp)
+                implementation(libs.ktor.client.curl)
             }
         }
     }

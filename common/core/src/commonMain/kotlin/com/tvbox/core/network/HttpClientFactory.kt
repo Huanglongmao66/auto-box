@@ -144,6 +144,6 @@ class NetworkService(private val httpClient: HttpClient) {
                 header(key, value)
             }
         }
-        return response.headers.entries().associate { it.key to it.value }
+        return response.headers.entries().associate { it.key to it.value.joinToString(", ") }
     }
 }
