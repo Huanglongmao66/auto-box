@@ -1,0 +1,56 @@
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.compose.multiplatform)
+    alias(libs.plugins.compose.compiler)
+}
+
+kotlin {
+    androidTarget()
+
+    sourceSets {
+        androidMain.dependencies {
+            implementation(project(":common:core"))
+            implementation(project(":common:device-api"))
+            implementation(project(":common:utils"))
+            implementation(project(":platform:android"))
+            implementation(project(":feature"))
+            implementation(compose.preview)
+            implementation(compose.ui)
+            implementation(compose.material3)
+            implementation(libs.media3.exoplayer)
+        }
+    }
+}
+
+android {
+    namespace = "com.tvbox.app.android"
+    compileSdk = 34
+
+    defaultConfig {
+        applicationId = "com.tvbox.app"
+        minSdk = 21
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0.0"
+
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+}
