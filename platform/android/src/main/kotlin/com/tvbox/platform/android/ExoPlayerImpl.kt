@@ -122,9 +122,8 @@ class ExoPlayerImpl(
         val builder = MediaItem.Builder().setUri(url)
 
         if (headers.isNotEmpty()) {
-            builder.setRequestMetadata(
-                MediaItem.RequestMetadata.Builder().setRequestHeaders(headers).build()
-            )
+            // Media3 1.4.x: 请求头通过 DataSource.Factory 设置，MediaItem 不再直接支持
+            // TODO: 后续通过 DefaultHttpDataSource.Factory.setDefaultRequestProperties 注入
         }
 
         val subtitleConfigs = buildSubtitleConfigurations(subtitleUrl)

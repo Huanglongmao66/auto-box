@@ -7,6 +7,7 @@ import com.tvbox.deviceapi.player.TrackType
 import kotlinx.browser.document
 import kotlinx.browser.window
 import org.w3c.dom.HTMLVideoElement
+import org.w3c.dom.events.Event
 
 /**
  * Web 平台播放器实现
@@ -172,16 +173,16 @@ class Html5PlayerImpl : IPlayer {
      * 绑定 HTML5 media 事件，桥接到业务监听器
      */
     private fun bindMediaEvents(video: HTMLVideoElement) {
-        video.addEventListener("loadedmetadata") { _ ->
+        video.addEventListener("loadedmetadata") { _: Event ->
             notify { it.onReady() }
             notify { it.onBufferingStateChanged(false) }
         }
-        video.addEventListener("play") { _ -> notify { it.onPlay() }; startProgressTimer() }
-        video.addEventListener("pause") { _ -> notify { it.onPause() }; stopProgressTimer() }
-        video.addEventListener("ended") { _ -> notify { it.onCompletion() }; stopProgressTimer() }
-        video.addEventListener("waiting") { _ -> notify { it.onBufferingStateChanged(true) } }
-        video.addEventListener("playing") { _ -> notify { it.onBufferingStateChanged(false) } }
-        video.addEventListener("error") { _ ->
+        video.addEventListener("play") { _: Event -> notify { it.onPlay() }; startProgressTimer() }
+        video.addEventListener("pause") { _: Event -> notify { it.onPause() }; stopProgressTimer() }
+        video.addEventListener("ended") { _: Event -> notify { it.onCompletion() }; stopProgressTimer() }
+        video.addEventListener("waiting") { _: Event -> notify { it.onBufferingStateChanged(true) } }
+        video.addEventListener("playing") { _: Event -> notify { it.onBufferingStateChanged(false) } }
+        video.addEventListener("error") { _: Event ->
             notify { it.onError(ERROR_CODE_GENERIC, ERROR_MSG_PLAYBACK) }
         }
     }
