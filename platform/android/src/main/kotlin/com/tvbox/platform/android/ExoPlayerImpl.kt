@@ -122,7 +122,9 @@ class ExoPlayerImpl(
         val builder = MediaItem.Builder().setUri(url)
 
         if (headers.isNotEmpty()) {
-            builder.setRequestHeaders(headers)
+            builder.setRequestMetadata(
+                MediaItem.RequestMetadata.Builder().setRequestHeaders(headers).build()
+            )
         }
 
         val subtitleConfigs = buildSubtitleConfigurations(subtitleUrl)
