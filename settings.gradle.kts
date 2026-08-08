@@ -19,6 +19,7 @@ rootProject.name = "auto-box"
 include(":common:core")
 include(":common:device-api")
 include(":common:utils")
+include(":common:ui")
 
 // ===== 平台实现模块 =====
 include(":platform:android")
