@@ -8,12 +8,15 @@ kotlin {
     jvm()
 
     sourceSets {
-        jvmMain.dependencies {
-            implementation(project(":common:device-api"))
-            implementation(project(":common:core"))
-            implementation(project(":common:utils"))
-            implementation(compose.desktop.currentOs)
-            implementation(libs.ktor.client.okhttp)
+        jvmMain {
+            kotlin.srcDir("src/main/kotlin")
+            dependencies {
+                implementation(project(":common:device-api"))
+                implementation(project(":common:core"))
+                implementation(project(":common:utils"))
+                implementation(compose.desktop.currentOs)
+                implementation(libs.ktor.client.okhttp)
+            }
         }
     }
 }
