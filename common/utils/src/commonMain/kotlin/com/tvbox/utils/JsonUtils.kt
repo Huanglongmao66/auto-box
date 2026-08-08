@@ -24,7 +24,7 @@ object JsonUtils {
     /**
      * 对象序列化为 JSON 字符串
      */
-    fun <T> toJson(value: T): String {
+    inline fun <reified T> toJson(value: T): String {
         return json.encodeToString(value)
     }
 
