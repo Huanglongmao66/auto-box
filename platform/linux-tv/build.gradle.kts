@@ -3,16 +3,16 @@ plugins {
 }
 
 kotlin {
-    linuxX64()
+    jvm()
 
     sourceSets {
-        linuxX64Main {
+        jvmMain {
             kotlin.srcDir("src/main/kotlin")
             dependencies {
                 implementation(project(":common:device-api"))
                 implementation(project(":common:core"))
                 implementation(project(":common:utils"))
-                implementation(libs.ktor.client.curl)
+                implementation(libs.ktor.client.okhttp)
             }
         }
     }

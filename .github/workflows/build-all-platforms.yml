@@ -160,9 +160,9 @@ jobs:
           path: app/app-web/build/dist/js/productionExecutable/**
           retention-days: 30
 
-  # ===== Linux TV 嵌入式可执行文件构建 =====
+  # ===== Linux TV 应用构建 =====
   build-linux-tv:
-    name: Build Linux TV (Native)
+    name: Build Linux TV (JVM)
     needs: changes
     if: needs.changes.outputs.should_build == 'true'
     runs-on: ubuntu-latest
@@ -183,14 +183,14 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build Linux TV Executable
-        run: ./gradlew :app:app-linux-tv:linkReleaseExecutableLinuxX64 --no-daemon --stacktrace
+      - name: Build Linux TV Distribution
+        run: ./gradlew :app:app-linux-tv:installDist --no-daemon --stacktrace
 
-      - name: Upload Linux TV Executable
+      - name: Upload Linux TV Distribution
         uses: actions/upload-artifact@v4
         with:
           name: tvbox-linux-tv
-          path: app/app-linux-tv/build/bin/linuxX64/releaseExecutable/**
+          path: app/app-linux-tv/build/install/app-linux-tv/**
           retention-days: 30
 
   # ===== 汇总发布 =====

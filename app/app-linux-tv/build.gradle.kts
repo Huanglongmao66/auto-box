@@ -1,18 +1,15 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
+    application
 }
 
 kotlin {
-    linuxX64 {
-        binaries {
-            executable {
-                entryPoint = "com.tvbox.app.linuxtv.main"
-            }
-        }
+    jvm {
+        withJava()
     }
 
     sourceSets {
-        linuxX64Main {
+        jvmMain {
             kotlin.srcDir("src/main/kotlin")
             dependencies {
                 implementation(project(":common:core"))
@@ -23,4 +20,8 @@ kotlin {
             }
         }
     }
+}
+
+application {
+    mainClass.set("com.tvbox.app.linuxtv.MainKt")
 }

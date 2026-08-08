@@ -13,7 +13,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
-import androidx.compose.ui.window.exitApplication
 import com.tvbox.core.di.ServiceLocator
 import com.tvbox.core.ui.theme.AppTheme
 import com.tvbox.platform.desktop.DesktopDeviceApi
@@ -27,7 +26,7 @@ import com.tvbox.platform.desktop.DesktopDeviceApi
  */
 fun main() = application {
     ServiceLocator.initialize(DesktopDeviceApi())
-    Window(onCloseRequest = ::exitApplication, title = "TVBox") {
+    Window(onCloseRequest = { exitApplication() }, title = "TVBox") {
         AppTheme {
             HomeScreen()
         }
