@@ -12,9 +12,12 @@ kotlin {
             implementation(project(":common:core"))
             implementation(project(":common:device-api"))
             implementation(project(":common:utils"))
+            implementation(project(":common:ui"))
             implementation(project(":platform:desktop"))
             implementation(project(":feature"))
             implementation(compose.desktop.currentOs)
+            implementation(compose.foundation)
+            implementation(compose.material3)
         }
     }
 }
