@@ -5,7 +5,10 @@ plugins {
 }
 
 kotlin {
-    js { browser() }
+    js {
+        browser()
+        binaries.executable()
+    }
 
     sourceSets {
         jsMain {

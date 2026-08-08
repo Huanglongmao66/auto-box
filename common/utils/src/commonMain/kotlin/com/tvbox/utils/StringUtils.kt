@@ -151,7 +151,7 @@ object StringUtils {
         val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
         return buildString {
             repeat(length) {
-                append(chars[(Math.random() * chars.length).toInt()])
+                append(chars[(kotlin.random.Random.nextDouble() * chars.length).toInt()])
             }
         }
     }

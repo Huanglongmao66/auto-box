@@ -59,7 +59,7 @@ object ServiceLocator {
     /**
      * 网络服务，懒加载以避免在应用启动期触发引擎初始化。
      */
-    private val networkService: NetworkService by lazy { NetworkService(httpClient) }
+    private val _networkService: NetworkService by lazy { NetworkService(httpClient) }
 
     /**
      * 初始化全部全局服务
@@ -89,7 +89,7 @@ object ServiceLocator {
 
     fun getConfigManager(): ConfigManager = configManager ?: notInitialized()
 
-    fun getNetworkService(): NetworkService = networkService
+    fun getNetworkService(): NetworkService = _networkService
 
     fun getSourceManager(): SourceManager = sourceManager ?: notInitialized()
 

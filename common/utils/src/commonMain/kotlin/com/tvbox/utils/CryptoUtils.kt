@@ -78,8 +78,8 @@ object CryptoUtils {
         val len = cleanHex.length
         val data = ByteArray(len / 2)
         for (i in 0 until len step 2) {
-            data[i / 2] = ((Character.digit(cleanHex[i], 16) shl 4)
-                + Character.digit(cleanHex[i + 1], 16)).toByte()
+            data[i / 2] = ((cleanHex[i].digitToInt(16) shl 4)
+                + cleanHex[i + 1].digitToInt(16)).toByte()
         }
         return data
     }
