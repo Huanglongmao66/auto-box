@@ -8,12 +8,15 @@ kotlin {
     js { browser() }
 
     sourceSets {
-        jsMain.dependencies {
-            implementation(project(":common:device-api"))
-            implementation(project(":common:core"))
-            implementation(project(":common:utils"))
-            implementation(compose.html.core)
-            implementation(libs.ktor.client.js)
+        jsMain {
+            kotlin.srcDir("src/main/kotlin")
+            dependencies {
+                implementation(project(":common:device-api"))
+                implementation(project(":common:core"))
+                implementation(project(":common:utils"))
+                implementation(compose.html.core)
+                implementation(libs.ktor.client.js)
+            }
         }
     }
 }
