@@ -17,9 +17,11 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -256,7 +258,7 @@ fun DetailScreen(
         // 相关推荐
         item {
             Column(modifier = Modifier.padding(horizontal = tokens.spacing.lg)) {
-                SectionHeader(title = "相关推荐", actionText = "更多") {}
+                SectionHeader(title = "相关推荐", actionText = "更多", onAction = {})
                 Spacer(modifier = Modifier.height(tokens.spacing.sm))
                 BoxWithConstraints {
                     val cols = when {
@@ -270,7 +272,7 @@ fun DetailScreen(
                         columns = cols,
                         onClick = onVodClick,
                         contentPadding = PaddingValues(0.dp)
-                    ) { }
+                    )
                 }
             }
         }
@@ -769,9 +771,6 @@ private fun PlayerProgressBar(progress: Float) {
         }
     }
 }
-
-private fun Modifier.offset(x: androidx.compose.ui.unit.Dp = 0.dp, y: androidx.compose.ui.unit.Dp = 0.dp): Modifier =
-    this.then(androidx.compose.foundation.layout.offset(x, y))
 
 private fun formatMs(ms: Int): String {
     val total = ms / 1000

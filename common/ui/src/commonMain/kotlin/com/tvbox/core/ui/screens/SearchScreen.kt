@@ -143,7 +143,7 @@ fun SearchScreen(
                                 columns = cols,
                                 onClick = onVodClick,
                                 contentPadding = PaddingValues(0.dp)
-                            ) { }
+                            )
                         }
                     }
                 }
@@ -153,9 +153,9 @@ fun SearchScreen(
             if (recentSearch.isNotEmpty()) {
                 item {
                     Column {
-                        SectionHeader(title = "最近搜索", actionText = "清空") {
+                        SectionHeader(title = "最近搜索", actionText = "清空", onAction = {
                             recentSearch.clear()
-                        }
+                        })
                         Spacer(modifier = Modifier.height(tokens.spacing.sm))
                         TagCloud(items = recentSearch) { keyword -> query = keyword }
                     }
