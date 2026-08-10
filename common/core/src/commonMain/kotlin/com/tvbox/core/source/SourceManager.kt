@@ -56,9 +56,18 @@ interface SourceManager {
     fun exportToJson(): String
 
     /**
-     * 从订阅地址导入影视源
+     * 从订阅地址导入影视源（同步占位，保留兼容）
      * @param url 订阅地址
      * @return 导入成功的影视源列表
      */
     fun importSubscription(url: String): List<MovieSource>
+
+    /**
+     * 从订阅地址异步导入影视源
+     * 拉取远程内容后解析为 MovieSource 列表并导入
+     * @param url 订阅地址
+     * @param fetcher 网络拉取函数（由调用方注入，避免 commonMain 直接依赖 Ktor 引擎）
+     * @return 导入成功的影视源列表
+     */
+    suspend fun importSubscriptionAsync(url: String, fetcher: suspend (String) -> String): List<MovieSource>
 }

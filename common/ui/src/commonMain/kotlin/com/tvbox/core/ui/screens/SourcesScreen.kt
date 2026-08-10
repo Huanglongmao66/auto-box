@@ -44,10 +44,16 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,19 +75,25 @@ import com.tvbox.core.ui.components.TVBoxChip
 import com.tvbox.core.ui.icons.TVBoxIcons
 import com.tvbox.core.ui.mock.MockData
 import com.tvbox.core.ui.theme.tvTokens
-import com.tvbox.core.ui.components.Badge as Badge1
+import kotlinx.coroutines.launch
 
 // ================= 影视源管理页 =================
 
 @Composable
 fun SourcesScreen(modifier: Modifier = Modifier) {
     val tokens = tvTokens()
-    val allSources = MockData.movieSources
+    // 使用可变列表管理源，支持动态添加
+    val allSources = remember { mutableStateListOf<MovieSource>().apply { addAll(MockData.movieSources) } }
+    val subscriptions = remember { mutableStateListOf<Pair<String, String>>().apply { addAll(MockData.sourceSubscriptions) } }
     var query by remember { mutableStateOf("") }
     var showAddDialog by remember { mutableStateOf(false) }
+    var showAddSubscriptionDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    var importingUrl by remember { mutableStateOf<String?>(null) }
 
     val sources = remember(query) {
-        if (query.isBlank()) allSources else allSources.filter {
+        if (query.isBlank()) allSources.toList() else allSources.filter {
             it.name.contains(query, ignoreCase = true) || it.key.contains(query, ignoreCase = true)
         }
     }
@@ -113,21 +125,59 @@ fun SourcesScreen(modifier: Modifier = Modifier) {
             // 订阅源分组
             item {
                 SettingGroup(title = "订阅地址") {
-                    MockData.sourceSubscriptions.forEach { (name, url) ->
+                    subscriptions.forEachIndexed { index, (name, url) ->
+                        val isImporting = importingUrl == url
                         SettingItem(
                             title = name,
                             subtitle = url,
                             icon = TVBoxIcons.Outlined.Language,
-                            trailing = "已订阅",
-                            onClick = { /* 刷新订阅 */ }
+                            trailing = if (isImporting) "导入中…" else "已订阅",
+                            onClick = {
+                                if (isImporting) return@SettingItem
+                                importingUrl = url
+                                scope.launch {
+                                    try {
+                                        // 使用内置 HTTP 请求拉取订阅内容
+                                        val raw = fetchSubscription(url)
+                                        val manager = com.tvbox.core.source.DefaultSourceManager()
+                                        // 先导入现有源
+                                        MockData.movieSources.forEach { manager.addSource(it) }
+                                        // 解析并导入订阅源
+                                        val imported = manager.importFromJson(raw)
+                                        if (imported.isNotEmpty()) {
+                                            allSources.clear()
+                                            allSources.addAll(manager.getSources())
+                                            snackbarHostState.showSnackbar(
+                                                "$name 导入成功，共 ${imported.size} 个源",
+                                                duration = SnackbarDuration.Short
+                                            )
+                                        } else {
+                                            snackbarHostState.showSnackbar(
+                                                "$name 解析失败，可能格式不兼容",
+                                                duration = SnackbarDuration.Short
+                                            )
+                                        }
+                                    } catch (e: Exception) {
+                                        snackbarHostState.showSnackbar(
+                                            "$name 导入失败：${e.message ?: "网络错误"}",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    } finally {
+                                        importingUrl = null
+                                    }
+                                }
+                            }
                         )
+                        if (index < subscriptions.lastIndex) {
+                            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        }
                     }
                     Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                     SettingItem(
                         title = "添加订阅",
                         subtitle = "从远程URL导入一组影视源配置",
                         icon = TVBoxIcons.Outlined.Add,
-                        onClick = { /* TODO: 弹窗添加 */ }
+                        onClick = { showAddSubscriptionDialog = true }
                     )
                 }
             }
@@ -168,10 +218,49 @@ fun SourcesScreen(modifier: Modifier = Modifier) {
             Spacer(modifier = Modifier.width(tokens.spacing.sm))
             Text("添加影视源", style = MaterialTheme.typography.labelLarge)
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
+
+        if (importingUrl != null) {
+            CircularProgressIndicator(
+                modifier = Modifier.align(Alignment.Center)
+            )
+        }
     }
 
     if (showAddDialog) {
-        AddSourceDialog(onDismiss = { showAddDialog = false })
+        AddSourceDialog(
+            onDismiss = { showAddDialog = false },
+            onAdd = { source ->
+                allSources.add(0, source)
+                showAddDialog = false
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        "已添加源：${source.name}",
+                        duration = SnackbarDuration.Short
+                    )
+                }
+            }
+        )
+    }
+
+    if (showAddSubscriptionDialog) {
+        AddSubscriptionDialog(
+            onDismiss = { showAddSubscriptionDialog = false },
+            onAdd = { name, url ->
+                subscriptions.add(name to url)
+                showAddSubscriptionDialog = false
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        "已添加订阅：$name",
+                        duration = SnackbarDuration.Short
+                    )
+                }
+            }
+        )
     }
 }
 
@@ -365,10 +454,15 @@ private fun SourceCard(source: MovieSource) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddSourceDialog(
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onAdd: (MovieSource) -> Unit
 ) {
     val tokens = tvTokens()
-    // 模拟 Dialog（使用全屏 overlay 避免 AlertDialog 平台差异）
+    var name by remember { mutableStateOf("") }
+    var api by remember { mutableStateOf("") }
+    var key by remember { mutableStateOf("") }
+    var selectedType by remember { mutableStateOf(1) } // 0=XML, 1=JSON, 3=Spider
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -404,16 +498,20 @@ private fun AddSourceDialog(
                 }
                 Spacer(modifier = Modifier.height(tokens.spacing.xl))
 
-                DialogField(label = "源名称", placeholder = "例如：最好资源网")
+                DialogField(label = "源名称", placeholder = "例如：最好资源网", value = name, onValueChange = { name = it })
                 Spacer(modifier = Modifier.height(tokens.spacing.md))
-                DialogField(label = "接口地址 (API)", placeholder = "https://...")
+                DialogField(label = "接口地址 (API)", placeholder = "https://...", value = api, onValueChange = { api = it })
                 Spacer(modifier = Modifier.height(tokens.spacing.md))
-                DialogField(label = "源 Key（英文标识）", placeholder = "csp_xxx")
+                DialogField(label = "源 Key（英文标识）", placeholder = "csp_xxx", value = key, onValueChange = { key = it })
                 Spacer(modifier = Modifier.height(tokens.spacing.md))
                 Row(horizontalArrangement = Arrangement.spacedBy(tokens.spacing.sm)) {
-                    TVBoxChip(text = "JSON", selected = true)
-                    TVBoxChip(text = "XML")
-                    TVBoxChip(text = "Spider")
+                    listOf("JSON" to 1, "XML" to 0, "Spider" to 3).forEach { (label, type) ->
+                        TVBoxChip(
+                            text = label,
+                            selected = selectedType == type,
+                            onClick = { selectedType = type }
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.height(tokens.spacing.xl))
 
@@ -425,7 +523,23 @@ private fun AddSourceDialog(
                     ) { Text("取消") }
                     Spacer(modifier = Modifier.width(tokens.spacing.md))
                     Button(
-                        onClick = onDismiss,
+                        onClick = {
+                            if (name.isNotBlank() && api.isNotBlank()) {
+                                val finalKey = if (key.isBlank()) "csp_${System.currentTimeMillis()}" else key
+                                onAdd(
+                                    MovieSource(
+                                        key = finalKey,
+                                        name = name.trim(),
+                                        api = api.trim(),
+                                        type = selectedType,
+                                        enabled = true,
+                                        searchable = true,
+                                        filterable = selectedType == 1,
+                                        order = System.currentTimeMillis().toInt() % 1000
+                                    )
+                                )
+                            }
+                        },
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(vertical = tokens.spacing.sm)
                     ) { Text("保存") }
@@ -436,14 +550,19 @@ private fun AddSourceDialog(
 }
 
 @Composable
-private fun DialogField(label: String, placeholder: String) {
+private fun DialogField(
+    label: String,
+    placeholder: String,
+    value: String,
+    onValueChange: (String) -> Unit
+) {
     val tokens = tvTokens()
     Column {
         Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
         Spacer(modifier = Modifier.height(tokens.spacing.sm))
         OutlinedTextField(
-            value = "",
-            onValueChange = {},
+            value = value,
+            onValueChange = onValueChange,
             placeholder = {
                 Text(placeholder, style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
@@ -457,4 +576,92 @@ private fun DialogField(label: String, placeholder: String) {
             )
         )
     }
+}
+
+// ================= 添加订阅 Dialog =================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddSubscriptionDialog(
+    onDismiss: () -> Unit,
+    onAdd: (String, String) -> Unit
+) {
+    val tokens = tvTokens()
+    var name by remember { mutableStateOf("") }
+    var url by remember { mutableStateOf("") }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.scrim)
+            .clickable { onDismiss() },
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .clickable { },
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = tokens.elevation.lg
+        ) {
+            Column(modifier = Modifier.padding(tokens.spacing.xl)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(MaterialTheme.shapes.large)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(TVBoxIcons.Outlined.Language, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                    Spacer(modifier = Modifier.width(tokens.spacing.md))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("添加订阅", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
+                        Text("输入订阅地址，支持单仓/多仓格式", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = onDismiss) { Icon(TVBoxIcons.Outlined.Close, null) }
+                }
+                Spacer(modifier = Modifier.height(tokens.spacing.xl))
+
+                DialogField(label = "订阅名称", placeholder = "例如：我的订阅", value = name, onValueChange = { name = it })
+                Spacer(modifier = Modifier.height(tokens.spacing.md))
+                DialogField(label = "订阅地址 (URL)", placeholder = "https://...", value = url, onValueChange = { url = it })
+                Spacer(modifier = Modifier.height(tokens.spacing.xl))
+
+                Row {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(vertical = tokens.spacing.sm)
+                    ) { Text("取消") }
+                    Spacer(modifier = Modifier.width(tokens.spacing.md))
+                    Button(
+                        onClick = {
+                            if (url.isNotBlank()) {
+                                val finalName = if (name.isBlank()) "自定义订阅" else name.trim()
+                                onAdd(finalName, url.trim())
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(vertical = tokens.spacing.sm)
+                    ) { Text("添加") }
+                }
+            }
+        }
+    }
+}
+
+// ================= 订阅网络拉取 =================
+
+/**
+ * 拉取订阅内容
+ *
+ * 使用 Ktor HTTP 客户端发起 GET 请求，返回响应文本。
+ * 在 commonMain 中通过 expect/actual 或 ServiceLocator 获取 HTTP 客户端。
+ */
+private suspend fun fetchSubscription(url: String): String {
+    val networkService = com.tvbox.core.di.ServiceLocator.getNetworkService()
+    return networkService.get(url, mapOf("User-Agent" to "Mozilla/5.0 (TVBox-Multiplatform/1.0)"))
 }

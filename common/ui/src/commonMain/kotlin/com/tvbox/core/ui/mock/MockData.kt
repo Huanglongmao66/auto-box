@@ -91,7 +91,29 @@ object MockData {
 
     val sourceSubscriptions = listOf(
         Pair("官方源合集", "https://tvbox.github.io/sources/official.json"),
-        Pair("社区源合集", "https://tvbox.github.io/sources/community.json")
+        Pair("社区源合集", "https://tvbox.github.io/sources/community.json"),
+        Pair("匿名单仓", "https://12586.kstore.space/123.txt"),
+        Pair("游魂单仓", "https://www.iyouhun.com/tv/dc"),
+        Pair("无名单仓", "https://github.catvod.com/raw.githubusercontent.com/tushen6/Tomorrow/master/lmw.json"),
+        Pair("欧歌单仓", "https://双龙.v.nxog.top/nxog/oua.php"),
+        Pair("匿名多仓", "https://12586.kstore.space/123.json"),
+        Pair("饭太硬", "http://www.饭太硬.net/tv"),
+        Pair("饭太硬(备用1)", "http://www.饭太硬.art/tv"),
+        Pair("饭太硬(备用2)", "http://fty.xxooo.cf/tv"),
+        Pair("饭太硬(备用3)", "http://fty.888484.xyz/tv"),
+        Pair("饭太硬(备用4)", "http://fty.333232.xyz/tv"),
+        Pair("小米", "https://gh-proxy.org/raw.githubusercontent.com/ggrrttyyiii/CatVodSpider/refs/heads/main/json/demo.json"),
+        Pair("肥猫", "http://肥猫.net/tv"),
+        Pair("王二小", "https://9280.kstore.vip/newwex.json"),
+        Pair("嗷呜", "https://9763.kstore.vip/aowu.json"),
+        Pair("摸鱼儿", "http://我不是.摸鱼儿.top"),
+        Pair("集多", "http://rihou.cc:88/demo.php"),
+        Pair("潇洒", "https://9877.kstore.space/one.json"),
+        Pair("欧歌", "https://xn--jory77o.v.nxog.top/m"),
+        Pair("小虎斑", "http://hb.小虎斑.site:25252/仅供测试"),
+        Pair("南风", "https://gh-proxy.com/raw.githubusercontent.com/yoursmile66/TVBox/refs/heads/main/XC.json"),
+        Pair("少儿频道", "https://gh-proxy.com/raw.githubusercontent.com/lubin776/0/refs/heads/main/tvbox/b2.json"),
+        Pair("戏曲音乐", "https://z.qiqiv.cn/666")
     )
 
     // ================= 分类 =================

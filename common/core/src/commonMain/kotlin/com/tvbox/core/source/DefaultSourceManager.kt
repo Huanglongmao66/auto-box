@@ -5,12 +5,15 @@ import com.tvbox.utils.JsonUtils
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 /**
  * [SourceManager] 的默认实现
  *
  * 使用内存中的 [MutableList] 维护影视源列表。
  * 兼容原版 TVBox 的 JSON 源格式：既支持纯数组 `[{...}]`，也支持 `{"sites": [...]}` 包裹结构。
+ * 支持多仓订阅格式：`{"urls": [{"url": "...", "name": "..."}]}`。
  */
 class DefaultSourceManager : SourceManager {
 
@@ -45,9 +48,34 @@ class DefaultSourceManager : SourceManager {
     override fun exportToJson(): String = JsonUtils.toJson(sources.toList())
 
     override fun importSubscription(url: String): List<MovieSource> {
-        // 订阅导入依赖网络请求（异步），而接口约定为同步返回。
-        // 完整实现需由调用方在协程中拉取远程内容后调用 importFromJson，
-        // 此处返回空列表作为占位，待网络层接入后补全。
+        return emptyList()
+    }
+
+    override suspend fun importSubscriptionAsync(
+        url: String,
+        fetcher: suspend (String) -> String
+    ): List<MovieSource> {
+        val raw = try {
+            fetcher(url)
+        } catch (e: Exception) {
+            return emptyList()
+        }
+        val rawTrimmed = raw.trim()
+
+        // 尝试直接解析为影视源列表
+        val direct = parseSources(rawTrimmed)
+        if (direct.isNotEmpty()) {
+            direct.forEach { upsert(it) }
+            return direct
+        }
+
+        // 尝试解析为多仓格式 {"urls": [{"url": "...", "name": "..."}]}
+        val multiStoreSources = parseMultiStore(rawTrimmed, fetcher)
+        if (multiStoreSources.isNotEmpty()) {
+            multiStoreSources.forEach { upsert(it) }
+            return multiStoreSources
+        }
+
         return emptyList()
     }
 
@@ -87,5 +115,61 @@ class DefaultSourceManager : SourceManager {
         } catch (e: Exception) {
             null
         }
+    }
+
+    /**
+     * 解析多仓订阅格式
+     *
+     * 多仓格式示例：
+     * ```json
+     * {"urls": [{"url": "https://...", "name": "仓库名"}]}
+     * ```
+     *
+     * 对每个子仓库 URL 发起请求，递归解析为影视源列表。
+     */
+    private suspend fun parseMultiStore(
+        json: String,
+        fetcher: suspend (String) -> String
+    ): List<MovieSource> {
+        val element = JsonUtils.parseToJsonElement(json) as? JsonObject ?: return emptyList()
+        val urlsArray = element["urls"] as? JsonArray ?: return emptyList()
+
+        val results = mutableListOf<MovieSource>()
+        for (item in urlsArray) {
+            val obj = item as? JsonObject ?: continue
+            val subUrl = (obj["url"] as? JsonPrimitive)?.contentOrNull ?: continue
+            val subName = (obj["name"] as? JsonPrimitive)?.contentOrNull ?: subUrl
+
+            try {
+                val subRaw = fetcher(subUrl).trim()
+                val subSources = parseSources(subRaw)
+                if (subSources.isNotEmpty()) {
+                    results.addAll(subSources)
+                } else {
+                    // 子仓库也可能是多仓格式，递归尝试
+                    val nested = parseMultiStoreRecursive(subRaw, fetcher, depth = 0)
+                    results.addAll(nested)
+                }
+            } catch (_: Exception) {
+                // 单个仓库拉取失败跳过
+            }
+        }
+        return results
+    }
+
+    /**
+     * 递归解析多仓（限制深度防止无限循环）
+     */
+    private suspend fun parseMultiStoreRecursive(
+        json: String,
+        fetcher: suspend (String) -> String,
+        depth: Int
+    ): List<MovieSource> {
+        if (depth >= 2) return emptyList()
+
+        val direct = parseSources(json)
+        if (direct.isNotEmpty()) return direct
+
+        return parseMultiStore(json, fetcher)
     }
 }
