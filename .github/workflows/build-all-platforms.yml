@@ -191,38 +191,41 @@ jobs:
 
       - name: Locate & Package Web into ZIP
         run: |
-          # Compose/JS 的生产构建输出目录可能位于以下位置之一
-          CANDIDATES=(
-            "app/app-web/build/dist/js/productionExecutable"
-            "app/app-web/build/dist/js/productionExecutable/webpack"
-            "app/app-web/build/webpack"
-            "app/app-web/build/distributions"
-          )
-          WEB_DIR=""
-          for d in "${CANDIDATES[@]}"; do
-            if [ -d "$d" ] && [ -n "$(ls -A "$d" 2>/dev/null)" ]; then
-              # 如果存在 index.html 优先采用
-              if [ -f "$d/index.html" ]; then
-                WEB_DIR="$d"
-                break
-              elif [ -z "$WEB_DIR" ]; then
-                WEB_DIR="$d"
-              fi
-            fi
-          done
-          # 兜底：全盘搜索最近一次 build 的 index.html
-          if [ -z "$WEB_DIR" ]; then
-            FOUND=$(find app/app-web/build -name "index.html" -type f -print 2>/dev/null | head -1)
-            if [ -n "$FOUND" ]; then WEB_DIR=$(dirname "$FOUND"); fi
+          # Kotlin Multiplatform + Compose Web 的 webpack 输出目录可能位于多个位置
+          # 1) 先打印整个 build 目录结构用于调试（只显示目录 + *.html / *.js 文件）
+          echo "==== 构建后 app/app-web/build 中 *.html 文件 ===="
+          find app/app-web/build -name "*.html" -type f -print 2>/dev/null || true
+          echo "==== 构建后 build 下的目录结构（深度<=6） ===="
+          find app/app-web/build -maxdepth 6 -type d 2>/dev/null || true
+          # 2) 优先找包含 index.html 的目录，选修改时间最新的
+          TARGET=""
+          INDEXES=$(find app/app-web/build -name "index.html" -type f -print 2>/dev/null)
+          if [ -n "$INDEXES" ]; then
+            TARGET=$(ls -1t $INDEXES 2>/dev/null | head -1 | xargs -I{} dirname {})
           fi
-          if [ -z "$WEB_DIR" ]; then
+          # 3) 如果没有 index.html，回退到候选列表中第一个存在且非空的目录
+          if [ -z "$TARGET" ]; then
+            CANDIDATES=(
+              "app/app-web/build/kotlin-webpack/js/productionExecutable"
+              "app/app-web/build/dist/js/productionExecutable"
+              "app/app-web/build/webpack/main/productionExecutable"
+              "app/app-web/build/dist/js/productionExecutable/webpack"
+              "app/app-web/build/dist/webpack"
+            )
+            for d in "${CANDIDATES[@]}"; do
+              if [ -d "$d" ] && [ -n "$(ls -A "$d" 2>/dev/null)" ]; then
+                TARGET="$d"
+                break
+              fi
+            done
+          fi
+          if [ -z "$TARGET" ]; then
             echo "::error::Cannot find Web build output directory under app/app-web/build"
-            find app/app-web/build -maxdepth 5 -type d 2>/dev/null | head -60 || true
             exit 1
           fi
-          echo "Using Web output directory: $WEB_DIR"
-          ls -la "$WEB_DIR"
-          (cd "$WEB_DIR" && zip -r "${{ github.workspace }}/tvbox-web.zip" .)
+          echo "Using Web output directory: $TARGET"
+          ls -la "$TARGET"
+          (cd "$TARGET" && zip -r "${{ github.workspace }}/tvbox-web.zip" .)
 
       - name: Upload Web Artifacts
         uses: actions/upload-artifact@v4
