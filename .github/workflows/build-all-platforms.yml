@@ -259,87 +259,72 @@ jobs:
 
       - name: Build Linux TV Distribution (ZIP + TAR)
         run: |
-          # 注意：kotlin multiplatform + application 插件组合下，
-          # installDist / distZip 默认 lib 目录中只包含主 jar，缺少运行时依赖。
-          # 因此这里不用 application 插件的打包产物；直接通过 jvmJar + jvmRuntimeClasspath
-          # 自行组装完整可运行目录，再打 zip/tar。
+          # kotlin multiplatform + application 插件组合下，installDist/distZip 有时不会把
+          # jvm 运行时依赖打进 lib 目录。因此这里采用：
+          #   jvmJar 产出主 jar  →  Gradle init-script 把主 jar + jvmRuntimeClasspath 全部拷贝到 full-libs
+          #   → 组装 TVBox/{lib, bin} → 打 zip/tar
           set -euo pipefail
+
+          ROOT="$PWD"
+          APP="$ROOT/app/app-linux-tv"
+          FULL_LIBS="$APP/build/full-libs"
+          STAGE_ROOT="$APP/build/stage"
+          STAGE="$STAGE_ROOT/TVBox"
 
           ./gradlew :app:app-linux-tv:jvmJar --no-daemon --stacktrace
 
-          # 1) 用 Gradle 把 jvmRuntimeClasspath 的 jar + 主 jar 拷贝到 build/full-libs
-          ./gradlew --no-daemon --stacktrace :app:app-linux-tv:copyLinuxTvDeps \
-            -PcopyLinuxTvOut="$PWD/app/app-linux-tv/build/full-libs" \
-            --init-script <(cat <<'INIT'
-            val targetProp = providers.gradleProperty("copyLinuxTvOut").forUseAtConfigurationTime().getOrElse("")
-            if (targetProp.isNotBlank() && project.path == ":app:app-linux-tv") {
-              tasks.register<Copy>("copyLinuxTvDeps") {
-                into(file(targetProp))
-                val jvmJar = tasks.named<org.gradle.jvm.tasks.Jar>("jvmJar")
-                from(jvmJar)
-                from(project.configurations.getByName("jvmRuntimeClasspath"))
-                duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+          # 把 Gradle init-script 先落地成临时文件，再用 -I 加载（避免 shell 嵌套 process-substitution + heredoc 导致的语法错误）
+          INIT_FILE="$(mktemp -p "$RUNNER_TEMP" copydeps-init.gradle.kts.XXXXXX)"
+          cat > "$INIT_FILE" <<'INIT_KTS'
+          val targetDir: String? by project
+          if (targetDir != null && project.path == ":app:app-linux-tv") {
+              tasks.register<Copy>("copyLinuxTvRuntimeDeps") {
+                  into(file(targetDir!!))
+                  from(tasks.named<org.gradle.jvm.tasks.Jar>("jvmJar"))
+                  from(project.configurations.getByName("jvmRuntimeClasspath"))
+                  duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+                  includeEmptyDirs = false
               }
-            }
-          INIT
-          ) || {
-            # init-script 方式在某些 Gradle 版本可能受限。兜底：直接用 Gradle 生成 classpath 列表再 shell 拷贝
-            echo "[fallback] 用 shell 手工拷贝 jvm runtime 依赖..."
-            OUT="$PWD/app/app-linux-tv/build/full-libs"
-            mkdir -p "$OUT"
-            CP=$(./gradlew :app:app-linux-tv:jvmPrintCp -q --console=plain --no-daemon \
-              -PprintCpOut="$OUT/cp.txt" \
-              --init-script <(cat <<'INIT2'
-              val outProp = providers.gradleProperty("printCpOut").forUseAtConfigurationTime().getOrElse("")
-              if (outProp.isNotBlank() && project.path == ":app:app-linux-tv") {
-                tasks.register("jvmPrintCp") {
-                  doLast {
-                    val jars = ArrayList<File>()
-                    jars.add(tasks.named<org.gradle.jvm.tasks.Jar>("jvmJar").get().archiveFile.get().asFile)
-                    project.configurations.getByName("jvmRuntimeClasspath").resolve().forEach { jars.add(it) }
-                    file(outProp).writeText(jars.joinToString("\n") { it.absolutePath })
-                  }
-                }
-              }
-          INIT2
-            ) || true
-            if [ -f "$OUT/cp.txt" ]; then
-              while IFS= read -r f; do
-                [ -n "$f" ] && [ -f "$f" ] && cp -f "$f" "$OUT/"
-              done < "$OUT/cp.txt"
-            fi
           }
+          INIT_KTS
+          echo "[init] using init-script: $INIT_FILE"
 
-          # 2) 确认 full-libs 大小
-          echo "==== Linux TV full-libs ($(du -sh app/app-linux-tv/build/full-libs | cut -f1)) ===="
-          ls -lh app/app-linux-tv/build/full-libs || true
+          mkdir -p "$FULL_LIBS"
+          ./gradlew --no-daemon --stacktrace \
+            -PtargetDir="$FULL_LIBS" \
+            -I "$INIT_FILE" \
+            :app:app-linux-tv:copyLinuxTvRuntimeDeps
 
-          # 3) 组装分发目录：TVBox/{lib,bin}
-          STAGE="$PWD/app/app-linux-tv/build/stage/TVBox"
-          rm -rf "$STAGE" && mkdir -p "$STAGE/lib" "$STAGE/bin"
-          cp -f app/app-linux-tv/build/full-libs/*.jar "$STAGE/lib/" 2>/dev/null || true
+          rm -f "$INIT_FILE"
 
-          # 4) 生成启动脚本 bin/TVBox：用通配符加载所有 jar（避免 classpath 太长）
-          MAIN=com.tvbox.app.linuxtv.MainKt
+          # 2) 打印 full-libs 信息
+          echo "==== Linux TV full-libs ($(du -sh "$FULL_LIBS" | cut -f1), $(ls -1 "$FULL_LIBS"/*.jar 2>/dev/null | wc -l) jars) ===="
+          ls -lh "$FULL_LIBS" || true
+
+          # 3) 组装 stage/TVBox/{lib, bin}
+          rm -rf "$STAGE_ROOT"
+          mkdir -p "$STAGE/lib" "$STAGE/bin"
+          cp -f "$FULL_LIBS"/*.jar "$STAGE/lib/"
+
+          # 4) 生成启动脚本 bin/TVBox（使用通配符 classpath 所有 jar）
           cat > "$STAGE/bin/TVBox" <<'SH'
           #!/usr/bin/env bash
           set -euo pipefail
           DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-          CP="$DIR/lib/*"
-          exec java -Xmx2G -cp "$CP" com.tvbox.app.linuxtv.MainKt "$@"
+          exec java -Xmx2G -cp "$DIR/lib/*" com.tvbox.app.linuxtv.MainKt "$@"
           SH
           chmod +x "$STAGE/bin/TVBox"
 
-          # 5) 打 zip/tar，并放到 workspace 根
-          (cd "$STAGE/.." && zip -r "$PWD/tvbox-linux-tv.zip" "TVBox")
-          tar -cf "$PWD/tvbox-linux-tv.tar" -C "$STAGE/.." "TVBox"
+          # 5) 打 zip/tar 到 workspace 根
+          (cd "$STAGE_ROOT" && zip -r "$ROOT/tvbox-linux-tv.zip" "TVBox")
+          tar -cf "$ROOT/tvbox-linux-tv.tar" -C "$STAGE_ROOT" "TVBox"
 
-          # 6) 兼容：再保留 application 插件 distZip/distTar 的原版产物（如果能成功）
+          # 6) 同时尝试 application 插件的 distZip/distTar 作为备用（能成功就带上）
           ./gradlew :app:app-linux-tv:distZip :app:app-linux-tv:distTar --no-daemon --stacktrace || true
-          # 打印最终 sizes
-          echo "==== Linux TV 最终产物大小 ===="
-          ls -lh tvbox-linux-tv.zip tvbox-linux-tv.tar
-          ls -lh app/app-linux-tv/build/distributions/*.zip app/app-linux-tv/build/distributions/*.tar 2>/dev/null || true
+
+          echo "==== Linux TV 最终产物 sizes ===="
+          ls -lh "$ROOT"/tvbox-linux-tv.zip "$ROOT"/tvbox-linux-tv.tar
+          ls -lh "$APP"/build/distributions/*.zip "$APP"/build/distributions/*.tar 2>/dev/null || true
 
       - name: Upload Linux TV Distribution
         uses: actions/upload-artifact@v4
