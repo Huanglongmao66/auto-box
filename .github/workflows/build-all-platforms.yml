@@ -273,20 +273,22 @@ jobs:
 
           ./gradlew :app:app-linux-tv:jvmJar --no-daemon --stacktrace
 
-          # 把 Gradle init-script 先落地成临时文件，再用 -I 加载（避免 shell 嵌套 process-substitution + heredoc 导致的语法错误）
-          INIT_FILE="$(mktemp -p "$RUNNER_TEMP" copydeps-init.gradle.kts.XXXXXX)"
-          cat > "$INIT_FILE" <<'INIT_KTS'
-          val targetDir: String? by project
-          if (targetDir != null && project.path == ":app:app-linux-tv") {
-              tasks.register<Copy>("copyLinuxTvRuntimeDeps") {
-                  into(file(targetDir!!))
-                  from(tasks.named<org.gradle.jvm.tasks.Jar>("jvmJar"))
-                  from(project.configurations.getByName("jvmRuntimeClasspath"))
-                  duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-                  includeEmptyDirs = false
+          # 把 Gradle init-script 先落地成临时文件（用 Groovy 语法，.init.gradle 兼容性最好），再用 -I 加载
+          INIT_FILE="$(mktemp -p "$RUNNER_TEMP" copydeps-init.gradle.XXXXXX)"
+          cat > "$INIT_FILE" <<'INIT_GROOVY'
+          allprojects {
+              def targetDir = project.hasProperty('targetDir') ? project.getProperty('targetDir') : null
+              if (targetDir != null && project.path == ":app:app-linux-tv") {
+                  tasks.register("copyLinuxTvRuntimeDeps", Copy.class) {
+                      into(file(targetDir))
+                      from(tasks.named("jvmJar"))
+                      from(project.configurations.getByName("jvmRuntimeClasspath"))
+                      duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+                      includeEmptyDirs = false
+                  }
               }
           }
-          INIT_KTS
+          INIT_GROOVY
           echo "[init] using init-script: $INIT_FILE"
 
           mkdir -p "$FULL_LIBS"
