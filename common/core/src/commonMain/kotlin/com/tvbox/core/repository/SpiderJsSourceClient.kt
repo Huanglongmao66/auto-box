@@ -8,8 +8,9 @@ import com.tvbox.utils.JsonUtils
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
-
+import kotlinx.serialization.json.jsonPrimitive
 /**
  * Spider-JS 源客户端 (type=3)
  *

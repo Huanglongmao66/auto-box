@@ -1,52 +1,78 @@
 package com.tvbox.core.repository
 
 import kotlinx.browser.window as browserWindow
-import kotlinx.js.eval as jsEval
 
 /**
- * Web(JS) 平台 JsEngine：直接用浏览器全局 eval。
- *
- * 出于 CSP/安全考虑，浏览器中的 Spider JS 仅支持字符串注入 + 纯 JS 运行；
- * 如果页面开启了严格 CSP 禁止 eval，调用会抛异常 -> 调用点 getOrDefault("") 安全降级。
+ * Web(JS) 平台 JsEngine：直接使用浏览器内置 Function 构造器 + globalThis 注入，
+ * 避免 kotlinx.js 导入别名差异导致的 "Unresolved reference 'jsEval'" 等编译问题。
  */
 actual object JsEngineFactory {
     actual val isSupported: Boolean get() = true
-
     actual fun create(): JsEngine = BrowserJsEngine()
 }
 
 private class BrowserJsEngine : JsEngine {
+    private val sandbox: dynamic = runCatching { js("({})") }.getOrElse { Any() }
+
     override fun set(name: String, value: Any?) {
-        val w = runCatching { js("globalThis") }.getOrNull() ?: runCatching { browserWindow }.getOrNull()
-        if (w != null) {
-            runCatching { jsEval("(function(o,k,v){ o[k]=v; })(typeof globalThis!=='undefined'?globalThis:window, ${name.toJsLiteral()}, ${value.toJsLiteral()});") }
-        } else {
-            runCatching { jsEval("var $name = ${value.toJsLiteral()};") }
-        }
+        runCatching { jsSandPut(sandbox, name, value) }
     }
 
     override fun eval(code: String): String {
-        return runCatching {
-            val v = jsEval(code)
-            v?.toString().orEmpty()
-        }.getOrDefault("")
+        return runCatching { normalize(jsEvalInSandbox(sandbox, code)) }.getOrDefault("")
     }
 
     override fun call(functionName: String, vararg args: Any?): String {
-        return runCatching {
-            val argList = args.joinToString(",") { it.toJsLiteral() }
-            val v = jsEval("$functionName($argList)")
-            v?.toString().orEmpty()
-        }.getOrDefault("")
+        return runCatching { normalize(jsCallInSandbox(sandbox, functionName, args)) }.getOrDefault("")
+    }
+
+    private fun normalize(r: dynamic): String {
+        if (r == null) return ""
+        val t = jsTypeOf(r)
+        return when (t) {
+            "string" -> r as String
+            "number", "boolean" -> r.toString()
+            "undefined" -> ""
+            else -> {
+                runCatching {
+                    val s = jsStringify(r)
+                    if (!s.isNullOrBlank() && s != "null") return s
+                }
+                runCatching { r.toString() as String }.getOrDefault("")
+            }
+        }
     }
 }
 
-private fun Any?.toJsLiteral(): String {
-    return when (this) {
+private fun jsTypeOf(v: dynamic): String = js("typeof v")
+private fun jsStringify(v: dynamic): String? = js("(typeof JSON !== 'undefined') ? JSON.stringify(v) : null")
+private fun jsSandPut(sandbox: dynamic, k: String, v: dynamic) {
+    js(" sandbox[k] = v; ")
+}
+
+private fun jsEvalInSandbox(sandbox: dynamic, code: String): dynamic {
+    val wrapped =
+        "(function(sandbox){ try { with(sandbox){ return (function(){ \"use strict\"; $code }).call(sandbox); } } catch(e){ sandbox.__lastErr = e && e.message || String(e); return undefined; } })"
+    val fn: dynamic = js(" (new Function('return ' + arguments[0]))() ")(wrapped)
+    return fn(sandbox)
+}
+
+private fun jsCallInSandbox(sandbox: dynamic, name: String, args: Array<out Any?>): dynamic {
+    val fn: dynamic = jsEvalInSandbox(sandbox, "return $name;")
+    return if (jsTypeOf(fn) == "function") {
+        js(" fn.apply(sandbox, args); ")
+    } else {
+        val argStr = args.joinToString(",") { argLiteral(it) }
+        jsEvalInSandbox(sandbox, "return $name($argStr);")
+    }
+}
+
+private fun argLiteral(a: Any?): String {
+    return when (a) {
         null -> "null"
-        is Boolean, is Number -> this.toString()
+        is Boolean, is Number, is Int, is Long, is Short, is Byte, is Double, is Float -> a.toString()
         is String -> {
-            val s = this
+            val s = a
             buildString(s.length + 2) {
                 append('"')
                 for (c in s) {
@@ -63,8 +89,9 @@ private fun Any?.toJsLiteral(): String {
             }
         }
         else -> {
-            val s = toString()
+            val s = a.toString()
             "\"${s.replace("\\", "\\\\").replace("\"", "\\\"")}\""
         }
     }
 }
+
