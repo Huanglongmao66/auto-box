@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -353,15 +354,17 @@ fun VodGrid(
     columns: Int = 3,
     onClick: (VodInfo) -> Unit = {},
     contentPadding: PaddingValues = PaddingValues(0.dp),
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    scrollEnabled: Boolean = true
 ) {
     val tokens = tvTokens()
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
-        modifier = modifier.fillMaxSize(),
+        modifier = if (scrollEnabled) modifier.fillMaxSize() else modifier.fillMaxWidth().wrapContentHeight(),
         contentPadding = contentPadding,
         horizontalArrangement = Arrangement.spacedBy(tokens.spacing.md),
-        verticalArrangement = Arrangement.spacedBy(tokens.spacing.lg)
+        verticalArrangement = Arrangement.spacedBy(tokens.spacing.lg),
+        userScrollEnabled = scrollEnabled
     ) {
         items(items, key = { it.vodId + it.sourceKey }) { vodInfo ->
             VodCard(vodInfo = vodInfo, onClick = onClick)

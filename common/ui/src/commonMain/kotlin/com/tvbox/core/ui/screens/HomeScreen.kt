@@ -79,9 +79,12 @@ fun HomeScreen(
     val tokens = tvTokens()
     val categories = MockData.categories
     var selectedCategoryIndex by remember { mutableIntStateOf(0) }
+    var showFullRanking by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
 
     androidx.compose.foundation.lazy.LazyColumn(
         modifier = modifier.fillMaxSize(),
+        state = listState,
         contentPadding = PaddingValues(
             start = tokens.spacing.lg,
             end = tokens.spacing.lg,
@@ -120,7 +123,7 @@ fun HomeScreen(
                 SectionHeader(
                     title = "为你推荐·$currentName",
                     actionText = "全部",
-                    onAction = { /* TODO: 跳转分类全览 */ }
+                    onAction = { selectedCategoryIndex = (selectedCategoryIndex + 1) % categories.size }
                 )
                 Spacer(modifier = Modifier.height(tokens.spacing.sm))
                 FeaturedRow(items = data, onClick = onVodClick)
@@ -132,12 +135,12 @@ fun HomeScreen(
             Column {
                 SectionHeader(
                     title = "本周热播榜",
-                    actionText = "更多",
-                    onAction = { /* TODO */ }
+                    actionText = if (showFullRanking) "收起" else "更多",
+                    onAction = { showFullRanking = !showFullRanking }
                 )
                 Spacer(modifier = Modifier.height(tokens.spacing.sm))
                 RankingRow(
-                    items = MockData.trending,
+                    items = if (showFullRanking) MockData.trending else MockData.trending.take(5),
                     onClick = onVodClick
                 )
             }
@@ -159,7 +162,8 @@ fun HomeScreen(
                         items = MockData.trending + MockData.movieList,
                         columns = cols,
                         onClick = onVodClick,
-                        contentPadding = PaddingValues(0.dp)
+                        contentPadding = PaddingValues(0.dp),
+                        scrollEnabled = false
                     )
                 }
             }
@@ -502,12 +506,21 @@ fun FavoritesScreen(
                     maxWidth >= 560.dp -> 4
                     else -> 3
                 }
-                VodGrid(
-                    items = data,
-                    columns = cols,
-                    onClick = onVodClick,
-                    contentPadding = PaddingValues(0.dp)
-                )
+                BoxWithConstraints {
+                    val cols = when {
+                        maxWidth >= 1200.dp -> 6
+                        maxWidth >= 800.dp -> 5
+                        maxWidth >= 560.dp -> 4
+                        else -> 3
+                    }
+                    VodGrid(
+                        items = data,
+                        columns = cols,
+                        onClick = onVodClick,
+                        contentPadding = PaddingValues(0.dp),
+                        scrollEnabled = false
+                    )
+                }
             }
         }
         item {

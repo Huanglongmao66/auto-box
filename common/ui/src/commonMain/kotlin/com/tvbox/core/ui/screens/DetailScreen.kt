@@ -49,6 +49,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedIconToggleButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -59,6 +62,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -84,6 +88,7 @@ import com.tvbox.core.ui.components.VodGrid
 import com.tvbox.core.ui.icons.TVBoxIcons
 import com.tvbox.core.ui.mock.MockData
 import com.tvbox.core.ui.theme.tvTokens
+import kotlinx.coroutines.launch
 import kotlin.math.min
 
 // ================= 影视详情页 =================
@@ -108,32 +113,43 @@ fun DetailScreen(
     val episodeGroups = episodes.chunked(groupSize).withIndex().toList()
     var groupIndex by remember { mutableIntStateOf(0) }
     var selectedEpId by remember { mutableStateOf<String?>(null) }
+    var showAllRelated by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
-    androidx.compose.foundation.lazy.LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            bottom = tokens.spacing.xxl
-        )
-    ) {
-        // 顶部返回条（因为二级详情页没有 TopBar）
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = tokens.spacing.md, vertical = tokens.spacing.sm),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(TVBoxIcons.Outlined.ArrowBack, contentDescription = "返回",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                IconButton(onClick = { /* 分享 */ }) {
-                    Icon(TVBoxIcons.Outlined.Share, null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    Box(modifier = modifier.fillMaxSize()) {
+        androidx.compose.foundation.lazy.LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                bottom = tokens.spacing.xxl
+            )
+        ) {
+            // 顶部返回条（因为二级详情页没有 TopBar）
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = tokens.spacing.md, vertical = tokens.spacing.sm),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(TVBoxIcons.Outlined.ArrowBack, contentDescription = "返回",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                    IconButton(onClick = {
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                message = "已复制分享链接：${vodInfo.vodName}",
+                                duration = SnackbarDuration.Short
+                            )
+                        }
+                    }) {
+                        Icon(TVBoxIcons.Outlined.Share, null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
-        }
 
         // Hero 海报 + 信息头
         item {
@@ -258,8 +274,17 @@ fun DetailScreen(
         // 相关推荐
         item {
             Column(modifier = Modifier.padding(horizontal = tokens.spacing.lg)) {
-                SectionHeader(title = "相关推荐", actionText = "更多", onAction = {})
+                SectionHeader(
+                    title = "相关推荐",
+                    actionText = if (showAllRelated) "收起" else "更多",
+                    onAction = { showAllRelated = !showAllRelated }
+                )
                 Spacer(modifier = Modifier.height(tokens.spacing.sm))
+                val relatedItems = if (showAllRelated) {
+                    MockData.trending + MockData.movieList.take(8)
+                } else {
+                    MockData.trending.take(6)
+                }
                 BoxWithConstraints {
                     val cols = when {
                         maxWidth >= 1200.dp -> 6
@@ -268,14 +293,22 @@ fun DetailScreen(
                         else -> 3
                     }
                     VodGrid(
-                        items = MockData.trending,
+                        items = relatedItems,
                         columns = cols,
                         onClick = onVodClick,
-                        contentPadding = PaddingValues(0.dp)
+                        contentPadding = PaddingValues(0.dp),
+                        scrollEnabled = false
                     )
                 }
             }
         }
+        }
+
+        // Snackbar 显示分享提示
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 }
 

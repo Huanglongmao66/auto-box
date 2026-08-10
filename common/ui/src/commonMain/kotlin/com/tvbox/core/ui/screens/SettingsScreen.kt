@@ -22,12 +22,17 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,39 +64,45 @@ fun SettingsScreen(
     var hdrEnhance by remember { mutableStateOf(false) }
     var useHwDecoding by remember { mutableStateOf(true) }
     var keepRatio by remember { mutableStateOf(true) }
+    var showClearCacheDialog by remember { mutableStateOf(false) }
+    var showClearHistoryDialog by remember { mutableStateOf(false) }
+    var showClearFavoritesDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
-    androidx.compose.foundation.lazy.LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = tokens.spacing.lg,
-            end = tokens.spacing.lg,
-            top = tokens.spacing.sm,
-            bottom = tokens.spacing.xxl
-        ),
-        verticalArrangement = Arrangement.spacedBy(tokens.spacing.lg)
-    ) {
-        // 版本信息卡片
-        item {
-            AppVersionCard(version = appVersion, buildTime = buildTime)
-        }
+    Box(modifier = modifier.fillMaxSize()) {
+        androidx.compose.foundation.lazy.LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = tokens.spacing.lg,
+                end = tokens.spacing.lg,
+                top = tokens.spacing.sm,
+                bottom = tokens.spacing.xxl
+            ),
+            verticalArrangement = Arrangement.spacedBy(tokens.spacing.lg)
+        ) {
+            // 版本信息卡片
+            item {
+                AppVersionCard(version = appVersion, buildTime = buildTime)
+            }
 
-        // 外观设置
-        item {
-            SettingGroup(title = "外观") {
-                SettingSwitch(
-                    title = "深色模式",
-                    subtitle = "影视应用推荐使用深色主题以获得更佳观影体验",
-                    icon = TVBoxIcons.Outlined.Palette,
-                    checked = isDark,
-                    onCheckedChange = { isDark = it }
-                )
-                HorizontalDividerItem()
-                SettingItem(
-                    title = "主题配色",
-                    subtitle = "靛紫（当前）",
-                    icon = TVBoxIcons.Outlined.Palette,
-                    trailing = "6 款"
-                )
+            // 外观设置
+            item {
+                SettingGroup(title = "外观") {
+                    SettingSwitch(
+                        title = "深色模式",
+                        subtitle = "影视应用推荐使用深色主题以获得更佳观影体验",
+                        icon = TVBoxIcons.Outlined.Palette,
+                        checked = isDark,
+                        onCheckedChange = { isDark = it }
+                    )
+                    HorizontalDividerItem()
+                    SettingItem(
+                        title = "主题配色",
+                        subtitle = "靛紫（当前）",
+                        icon = TVBoxIcons.Outlined.Palette,
+                        trailing = "6 款"
+                    )
                 HorizontalDividerItem()
                 SettingItem(
                     title = "首页卡片样式",
@@ -182,7 +193,8 @@ fun SettingsScreen(
                 SettingItem(
                     title = "清除缓存",
                     subtitle = "仅清除图片和网络请求缓存，保留播放历史",
-                    icon = TVBoxIcons.Outlined.Delete
+                    icon = TVBoxIcons.Outlined.Delete,
+                    onClick = { showClearCacheDialog = true }
                 )
                 HorizontalDividerItem()
                 SettingItem(
@@ -196,7 +208,7 @@ fun SettingsScreen(
                     subtitle = "避免使用移动网络消耗流量",
                     icon = TVBoxIcons.Outlined.Language,
                     checked = true,
-                    onCheckedChange = { /* noop */ }
+                    onCheckedChange = { /* 网络策略预留 */ }
                 )
             }
         }
@@ -207,26 +219,44 @@ fun SettingsScreen(
                 SettingItem(
                     title = "导入/导出配置",
                     subtitle = "将设置、影视源、收藏记录打包为 JSON",
-                    icon = TVBoxIcons.Outlined.Article
+                    icon = TVBoxIcons.Outlined.Article,
+                    onClick = {
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                "导入/导出功能开发中...",
+                                duration = SnackbarDuration.Short
+                            )
+                        }
+                    }
                 )
                 HorizontalDividerItem()
                 SettingItem(
                     title = "同步云端备份",
                     subtitle = "未登录",
                     icon = TVBoxIcons.Outlined.Translate,
-                    trailing = "立即登录"
+                    trailing = "立即登录",
+                    onClick = {
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                "请先登录后使用云备份功能",
+                                duration = SnackbarDuration.Short
+                            )
+                        }
+                    }
                 )
                 HorizontalDividerItem()
                 SettingItem(
                     title = "清除播放历史",
                     subtitle = "删除所有观看进度与历史记录",
-                    icon = TVBoxIcons.Outlined.Delete
+                    icon = TVBoxIcons.Outlined.Delete,
+                    onClick = { showClearHistoryDialog = true }
                 )
                 HorizontalDividerItem()
                 SettingItem(
                     title = "清除全部收藏",
                     subtitle = "取消所有影视的收藏标记",
-                    icon = TVBoxIcons.Outlined.Favorite
+                    icon = TVBoxIcons.Outlined.Favorite,
+                    onClick = { showClearFavoritesDialog = true }
                 )
             }
         }
@@ -257,7 +287,14 @@ fun SettingsScreen(
         item {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 OutlinedButton(
-                    onClick = { /* 退出登录（预留） */ },
+                    onClick = {
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                "已退出登录",
+                                duration = SnackbarDuration.Short
+                            )
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(0.5f),
                     contentPadding = PaddingValues(vertical = tokens.spacing.md)
                 ) {
@@ -271,6 +308,54 @@ fun SettingsScreen(
                 )
             }
         }
+    }
+
+    SnackbarHost(
+        hostState = snackbarHostState,
+        modifier = Modifier.align(Alignment.BottomCenter)
+    )
+
+    if (showClearCacheDialog || showClearHistoryDialog || showClearFavoritesDialog) {
+        val (title, message) = when {
+            showClearCacheDialog -> "清除缓存" to "确定要清除所有图片和网络请求缓存吗？此操作不可撤销。"
+            showClearHistoryDialog -> "清除播放历史" to "确定要删除所有观看进度与历史记录吗？此操作不可撤销。"
+            else -> "清除全部收藏" to "确定要取消所有影视的收藏标记吗？此操作不可撤销。"
+        }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = {
+                showClearCacheDialog = false
+                showClearHistoryDialog = false
+                showClearFavoritesDialog = false
+            },
+            title = { Text(title) },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val action = when {
+                        showClearCacheDialog -> "缓存已清除"
+                        showClearHistoryDialog -> "播放历史已清除"
+                        else -> "收藏已全部清除"
+                    }
+                    showClearCacheDialog = false
+                    showClearHistoryDialog = false
+                    showClearFavoritesDialog = false
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            action,
+                            duration = SnackbarDuration.Short
+                        )
+                    }
+                }) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showClearCacheDialog = false
+                    showClearHistoryDialog = false
+                    showClearFavoritesDialog = false
+                }) { Text("取消") }
+            }
+        )
+    }
     }
 }
 

@@ -71,6 +71,21 @@ fun SearchScreen(
     var selectedCategories by remember { mutableStateOf(emptyList<String>()) }
     val showResults = query.isNotEmpty()
 
+    // 基于分类过滤的逻辑
+    fun filterByCategories(items: List<VodInfo>): List<VodInfo> {
+        if (selectedCategories.isEmpty()) return items
+        return items.filter { vod ->
+            val source = when {
+                vod in MockData.movieList -> "电影"
+                vod in MockData.dramaList -> "电视剧"
+                vod in MockData.animeList -> "动漫"
+                vod in MockData.trending -> "电影" // trending 混合，默认归入电影
+                else -> null
+            }
+            source != null && source in selectedCategories
+        }
+    }
+
     androidx.compose.foundation.lazy.LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -108,26 +123,26 @@ fun SearchScreen(
             // 结果列表
             item {
                 Column {
-                    SectionHeader(
-                        title = "搜索结果",
-                        action = {
-                            val resultCount = (MockData.movieList + MockData.dramaList + MockData.animeList)
-                                .filter { it.vodName.contains(query, ignoreCase = true) }
-                                .count()
-                            Badge(text = if (resultCount > 0) "约 $resultCount 个结果" else "无结果")
-                        }
-                    )
-                    Spacer(modifier = Modifier.height(tokens.spacing.sm))
-                    val allResults = (MockData.movieList + MockData.dramaList + MockData.animeList)
+                    val allResultsRaw = (MockData.movieList + MockData.dramaList + MockData.animeList)
                         .filter {
                             query.isBlank() || it.vodName.contains(query, ignoreCase = true)
                                 || it.vodActor.orEmpty().contains(query, ignoreCase = true)
                                 || it.vodDirector.orEmpty().contains(query, ignoreCase = true)
                         }
+                    val allResults = filterByCategories(allResultsRaw)
+                    SectionHeader(
+                        title = "搜索结果",
+                        action = {
+                            Badge(text = if (allResults.isNotEmpty()) "约 ${allResults.size} 个结果" else "无结果")
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(tokens.spacing.sm))
                     if (allResults.isEmpty()) {
                         EmptyView(
                             title = "没有找到相关结果",
-                            description = "试试换个关键字，或者在影视源中添加更多资源",
+                            description = if (selectedCategories.isNotEmpty()) 
+                                "试试调整分类筛选或换个关键字" 
+                            else "试试换个关键字，或者在影视源中添加更多资源",
                             icon = TVBoxIcons.Outlined.Search
                         )
                     } else {
@@ -142,7 +157,8 @@ fun SearchScreen(
                                 items = allResults.take(24),
                                 columns = cols,
                                 onClick = onVodClick,
-                                contentPadding = PaddingValues(0.dp)
+                                contentPadding = PaddingValues(0.dp),
+                                scrollEnabled = false
                             )
                         }
                     }
