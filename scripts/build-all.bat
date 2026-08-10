@@ -52,15 +52,15 @@ goto :eof
 :build_web
 echo.
 echo ^>^>^> 编译 Web 静态资源...
-call %GRADLE_CMD% :app:app-web:browserProductionWebpack
+call %GRADLE_CMD% :app:app-web:jsBrowserProductionWebpack
 echo ^>^>^> Web 输出: app\app-web\build\dist\js\productionExecutable\
 goto :eof
 
 :build_linux_tv
 echo.
-echo ^>^>^> 编译嵌入式 Linux 可执行文件...
-call %GRADLE_CMD% :app:app-linux-tv:linkReleaseExecutableLinuxX64
-echo ^>^>^> Linux TV 输出: app\app-linux-tv\build\bin\linuxX64\releaseExecutable\
+echo ^>^>^> 编译 Linux TV 可执行文件 (JVM distribution)...
+call %GRADLE_CMD% :app:app-linux-tv:distZip
+echo ^>^>^> Linux TV 输出: app\app-linux-tv\build\distributions\
 goto :eof
 
 :done
