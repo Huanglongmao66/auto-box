@@ -5,7 +5,7 @@ import com.tvbox.core.favorite.FavoriteManager
 import com.tvbox.core.history.HistoryManager
 import com.tvbox.core.network.NetworkService
 import com.tvbox.core.repository.DefaultVodRepository
-import com.tvbox.core.repository.TvboxSourceClient
+import com.tvbox.core.repository.UnifiedSourceClient
 import com.tvbox.core.repository.VodRepository
 import com.tvbox.core.source.DefaultSourceManager
 import com.tvbox.core.source.SourceManager
@@ -78,7 +78,7 @@ object ServiceLocator {
         sourceManager = DefaultSourceManager()
         vodRepository = DefaultVodRepository(
             sourceManager = sourceManager!!,
-            client = TvboxSourceClient(
+            client = UnifiedSourceClient.createDefault(
                 networkService = _networkService,
                 sourceManager = sourceManager!!
             )

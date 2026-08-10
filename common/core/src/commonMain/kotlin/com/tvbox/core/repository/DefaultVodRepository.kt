@@ -19,7 +19,7 @@ import kotlinx.coroutines.coroutineScope
  */
 internal class DefaultVodRepository(
     private val sourceManager: SourceManager,
-    private val client: TvboxSourceClient
+    private val client: UnifiedSourceClient
 ) : VodRepository {
 
     // 简单的分类缓存（首次 homeContent 成功后缓存）
