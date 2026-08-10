@@ -39,6 +39,7 @@ import com.tvbox.core.ui.components.ScoreBadge
 import com.tvbox.core.ui.components.SettingGroup
 import com.tvbox.core.ui.components.SettingItem
 import com.tvbox.core.ui.components.SettingSwitch
+import com.tvbox.core.ui.icons.OutlinedIcons
 import com.tvbox.core.ui.icons.TVBoxIcons
 import com.tvbox.core.ui.theme.tvTokens
 
@@ -285,8 +286,8 @@ private fun HorizontalDividerItem() {
 }
 
 // 处理 GridViewSafeInvoke（Material Icons Outlined 中没有 GridView）
-private val TVBoxIcons.Outlined.GridViewSafeInvoke
-    get() = TVBoxIcons.Outlined.Category
+private val OutlinedIcons.GridViewSafeInvoke
+    get() = OutlinedIcons.Category
 
 // ================= 版本信息头部卡片 =================
 

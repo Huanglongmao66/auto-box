@@ -585,4 +585,4 @@ private fun Modifier.clickableSafe(onClick: () -> Unit): Modifier =
 
 // 直接内联 clickable，防止不同平台报错
 private fun Modifier.clickableSafeImpl(onClick: () -> Unit): Modifier =
-    androidx.compose.foundation.clickable(onClick = onClick)
+    (this as androidx.compose.ui.Modifier).clickable(onClick = onClick)

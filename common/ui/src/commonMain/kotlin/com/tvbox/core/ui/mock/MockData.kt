@@ -5,6 +5,11 @@ import com.tvbox.core.model.VodClass
 import com.tvbox.core.model.VodEpisode
 import com.tvbox.core.model.VodInfo
 
+// commonMain 中没有 java.lang.System，Mock 数据使用固定时间戳即可
+private object MockClock {
+    fun currentTimeMillis(): Long = 1_760_000_000_000L
+}
+
 /**
  * UI 展示 Mock 数据
  *
@@ -26,7 +31,7 @@ object MockData {
             logo = "",
             desc = "高清4K资源站，更新速度快",
             order = 1,
-            lastUpdate = System.currentTimeMillis() - 3600_000
+            lastUpdate = MockClock.currentTimeMillis() - 3600_000
         ),
         MovieSource(
             key = "csp_yszy",

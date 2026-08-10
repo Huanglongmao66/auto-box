@@ -777,7 +777,8 @@ private fun formatMs(ms: Int): String {
     val h = total / 3600
     val m = (total % 3600) / 60
     val s = total % 60
-    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%02d:%02d".format(m, s)
+    fun pad2(n: Int) = if (n < 10) "0$n" else n.toString()
+    return if (h > 0) "$h:${pad2(m)}:${pad2(s)}" else "${pad2(m)}:${pad2(s)}"
 }
 
 @Composable
