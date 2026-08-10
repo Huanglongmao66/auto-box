@@ -1,12 +1,14 @@
 package com.tvbox.core.ui.layout
 
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -109,4 +111,27 @@ fun rememberAdaptiveConfig(): AdaptiveConfig {
         config = computeAdaptiveConfig(maxWidth)
     }
     return config
+}
+
+/**
+ * TVBox 统一自适应布局外壳。
+ *
+ * 通过 [BoxWithConstraints] 读取当前可用尺寸，并基于以下规则向内容派发参数：
+ * - isLandscape：宽 >= 高（横向布局）
+ * - isLarge：宽 >= 800dp（平板/桌面/TV）
+ * - useSideNav：宽 >= 1280dp 时使用侧边导航替代底部导航栏
+ */
+@Composable
+fun AdaptiveLayout(
+    modifier: Modifier = Modifier,
+    content: @Composable (isLandscape: Boolean, isLarge: Boolean, useSideNav: Boolean) -> Unit
+) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val w = maxWidth
+        val h = maxHeight
+        val isLandscape = w >= h
+        val isLarge = w >= 800.dp
+        val useSideNav = w >= 1280.dp
+        content(isLandscape, isLarge, useSideNav)
+    }
 }
