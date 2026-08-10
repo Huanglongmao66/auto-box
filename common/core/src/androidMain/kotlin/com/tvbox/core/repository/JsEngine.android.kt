@@ -6,7 +6,7 @@ package com.tvbox.core.repository
  *   - ART 不提供 javax.script（通常都没有），因此默认不查 Nashorn
  *   - 如果都找不到，返回 null -> SpiderJsSourceClient 安全降级为空
  */
-actual object JsEngineFactory {
+internal actual object JsEngineFactory {
     actual val isSupported: Boolean get() {
         return runCatching { Class.forName("org.mozilla.javascript.Context") }.getOrNull() != null
     }

@@ -6,7 +6,7 @@ import kotlinx.browser.window as browserWindow
  * Web(JS) 平台 JsEngine：直接使用浏览器内置 Function 构造器 + globalThis 注入，
  * 避免 kotlinx.js 导入别名差异导致的 "Unresolved reference 'jsEval'" 等编译问题。
  */
-actual object JsEngineFactory {
+internal actual object JsEngineFactory {
     actual val isSupported: Boolean get() = true
     actual fun create(): JsEngine = BrowserJsEngine()
 }

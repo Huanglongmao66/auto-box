@@ -11,7 +11,7 @@ import javax.script.ScriptEngineManager
 import javax.script.SimpleBindings
 import kotlin.jvm.Throws
 
-actual object JsEngineFactory {
+internal actual object JsEngineFactory {
     actual val isSupported: Boolean get() {
         val clazz = runCatching { Class.forName("javax.script.ScriptEngineManager") }.getOrNull()
             ?: runCatching { Class.forName("org.mozilla.javascript.Context") }.getOrNull()

@@ -23,7 +23,7 @@ import java.net.URLClassLoader
  *   - String playerContent(String flag, String id, String vipFlags)
  * 未命中的方法返回 ""，调用端 parseList("") 会安全返回空。
  */
-actual object JarSpiderLoader {
+internal actual object JarSpiderLoader {
     actual val isSupported: Boolean get() = true
 
     actual fun load(source: MovieSource, http: HttpFetcher): JarSpiderHandle? {

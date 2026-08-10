@@ -156,8 +156,7 @@ internal object TvboxXmlResponseParser {
             vodLang = tagText(vb, "lang", arrayOf("language", "vod_lang")),
             vodClass = tagText(vb, "type", arrayOf("category", "vod_class", "cid")),
             vodContent = tagText(vb, "content", arrayOf("desc", "vod_content", "description", "blurb")),
-            vodScore = tagText(vb, "score", arrayOf("rating", "vod_score")).toFloatOrNull() ?: 0f,
-            vodDoubanId = tagText(vb, "douban_id", arrayOf("doubanId")),
+            vodScore = tagText(vb, "score", arrayOf("rating", "vod_score")),
             episodes = emptyList()
         )
     }

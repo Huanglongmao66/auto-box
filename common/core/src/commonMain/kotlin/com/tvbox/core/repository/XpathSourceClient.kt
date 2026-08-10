@@ -225,8 +225,10 @@ internal class XpathSourceClient(private val http: HttpFetcher) : SourceClient {
         val nodes = HtmlSelector.selectAll(html, nodeRule)
         val out = mutableListOf<VodClass>()
         for (n in nodes) {
-            val id = extractFromNode(n, idRule).extractTidFromHref().ifBlank { continue }
-            val name = extractFromNode(n, nameRule).ifBlank { continue }
+            val id = extractFromNode(n, idRule).extractTidFromHref()
+            if (id.isBlank()) continue
+            val name = extractFromNode(n, nameRule)
+            if (name.isBlank()) continue
             out.add(VodClass(id, name))
         }
         return out
@@ -258,7 +260,7 @@ internal class XpathSourceClient(private val http: HttpFetcher) : SourceClient {
                 VodInfo(
                     vodId = id, sourceKey = sourceKey, vodName = name,
                     vodPic = pic, vodRemarks = note,
-                    vodDoubanId = detailLink,
+                    vodContent = detailLink,
                     episodes = emptyList()
                 )
             )
@@ -306,9 +308,10 @@ internal class XpathSourceClient(private val http: HttpFetcher) : SourceClient {
         if (playlists.isNotEmpty()) {
             playlists.forEachIndexed { lineIdx, listEl ->
                 val lineName = flags.getOrNull(lineIdx) ?: "线路${lineIdx + 1}"
-                val as = if (extractFromNode(listEl, "tagName()").equals("a", true)) listOf(listEl)
+                val tagName = extractFromNode(listEl, "tagName()")
+                val asList: List<String> = if (tagName.equals("a", true)) listOf(listEl)
                 else HtmlSelector.selectAll(listEl, "a")
-                as.forEachIndexed { ei, a ->
+                asList.forEachIndexed { ei, a ->
                     val epName = extractFromNode(a, urlListName).trim().ifBlank { "第${ei + 1}集" }
                     val epUrl = extractFromNode(a, urlListUrl).resolveUrl(host)
                     if (epUrl.isBlank()) return@forEachIndexed

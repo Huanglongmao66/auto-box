@@ -20,12 +20,12 @@ package com.tvbox.core.repository
  */
 
 /** commonMain: 引擎工厂；各平台 actual 实现 */
-expect object JsEngineFactory {
+internal expect object JsEngineFactory {
     val isSupported: Boolean
     fun create(): JsEngine?
 }
 
-interface JsEngine : AutoCloseable {
+internal interface JsEngine : AutoCloseable {
     fun set(name: String, value: Any?)
     fun eval(code: String): String
     fun call(functionName: String, vararg args: Any?): String

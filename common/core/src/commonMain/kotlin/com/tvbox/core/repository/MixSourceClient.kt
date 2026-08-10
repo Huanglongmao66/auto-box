@@ -43,14 +43,14 @@ internal class MixSourceClient(
 
     private fun parseSites(ext: String): List<String> {
         if (ext.isBlank()) return emptyList()
-        runCatching {
-            val obj = JsonUtils.parseToJsonElement(ext).jsonObject
-            val s = obj["sites"] ?: return emptyList()
-            if (s is JsonArray) return s.mapNotNull { it.jsonPrimitive.contentOrNull }
-            val str = s.jsonPrimitive.contentOrNull ?: return emptyList()
-            if (str.isNotBlank()) return str.split(Regex(""",|\s+""")).filter { it.isNotBlank() }
-        }
-        return emptyList()
+        return runCatching {
+            val obj = JsonUtils.parseToJsonElement(ext)?.jsonObject ?: return@runCatching emptyList()
+            val s = obj["sites"] ?: return@runCatching emptyList()
+            if (s is JsonArray) return@runCatching s.mapNotNull { it.jsonPrimitive.contentOrNull }
+            val str = s.jsonPrimitive.contentOrNull ?: return@runCatching emptyList()
+            if (str.isNotBlank()) str.split(Regex(""",|\s+""")).filter { it.isNotBlank() }
+            else emptyList()
+        }.getOrDefault(emptyList())
     }
 
     override suspend fun home(source: MovieSource): TvboxJsonResponseParser.ParseListResult = coroutineScope {

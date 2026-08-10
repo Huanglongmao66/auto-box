@@ -67,7 +67,7 @@ internal class SpiderJsSourceClient(private val http: HttpFetcher) : SourceClien
         }
     }
 
-    private fun loadJsCode(source: MovieSource): String {
+    private suspend fun loadJsCode(source: MovieSource): String {
         val js = source.js
         if (js.isBlank()) return ""
         // 如果是 http(s) URL，下载脚本
@@ -78,7 +78,7 @@ internal class SpiderJsSourceClient(private val http: HttpFetcher) : SourceClien
         return js
     }
 
-    private fun injectBridge(engine: JsEngine, source: MovieSource) {
+    private suspend fun injectBridge(engine: JsEngine, source: MovieSource) {
         // 暴露少量 JS 工具：req(reqJson) 同步 GET/POST，返回字符串
         val bridge = SpiderBridge(http, source)
         engine.set("__tvbox_req__", bridge.asJsCallable())
@@ -174,8 +174,8 @@ internal class SpiderJsSourceClient(private val http: HttpFetcher) : SourceClien
 
     companion object {
         /** Spider 对 JS 暴露的同步 req(reqJsonStr) 接口：JS 端通过 JSON 传 {url,method,headers,body} */
-        class SpiderBridge(private val http: HttpFetcher, private val source: MovieSource) {
-            fun asJsCallable(): (String) -> String = { reqJson ->
+        internal class SpiderBridge(private val http: HttpFetcher, private val source: MovieSource) {
+            fun asJsCallable(): suspend (String) -> String = { reqJson ->
                 runCatching {
                     val obj = JsonUtils.parseToJsonElement(reqJson) as? JsonObject
                         ?: JsonObject(emptyMap())

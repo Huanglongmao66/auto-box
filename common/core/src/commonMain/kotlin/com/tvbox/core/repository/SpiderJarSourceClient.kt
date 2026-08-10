@@ -117,7 +117,7 @@ internal interface JarSpiderHandle {
 }
 
 /** expect/actual：按平台实现 jar 加载 */
-expect object JarSpiderLoader {
+internal expect object JarSpiderLoader {
     val isSupported: Boolean
     fun load(source: MovieSource, http: HttpFetcher): JarSpiderHandle?
 }
