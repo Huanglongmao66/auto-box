@@ -189,10 +189,40 @@ jobs:
       - name: Build Web Bundle
         run: ./gradlew :app:app-web:jsBrowserProductionWebpack --no-daemon --stacktrace
 
-      - name: Package Web into ZIP
+      - name: Locate & Package Web into ZIP
         run: |
-          cd app/app-web/build/dist/js/productionExecutable
-          zip -r ${{ github.workspace }}/tvbox-web.zip .
+          # Compose/JS 的生产构建输出目录可能位于以下位置之一
+          CANDIDATES=(
+            "app/app-web/build/dist/js/productionExecutable"
+            "app/app-web/build/dist/js/productionExecutable/webpack"
+            "app/app-web/build/webpack"
+            "app/app-web/build/distributions"
+          )
+          WEB_DIR=""
+          for d in "${CANDIDATES[@]}"; do
+            if [ -d "$d" ] && [ -n "$(ls -A "$d" 2>/dev/null)" ]; then
+              # 如果存在 index.html 优先采用
+              if [ -f "$d/index.html" ]; then
+                WEB_DIR="$d"
+                break
+              elif [ -z "$WEB_DIR" ]; then
+                WEB_DIR="$d"
+              fi
+            fi
+          done
+          # 兜底：全盘搜索最近一次 build 的 index.html
+          if [ -z "$WEB_DIR" ]; then
+            FOUND=$(find app/app-web/build -name "index.html" -type f -print 2>/dev/null | head -1)
+            if [ -n "$FOUND" ]; then WEB_DIR=$(dirname "$FOUND"); fi
+          fi
+          if [ -z "$WEB_DIR" ]; then
+            echo "::error::Cannot find Web build output directory under app/app-web/build"
+            find app/app-web/build -maxdepth 5 -type d 2>/dev/null | head -60 || true
+            exit 1
+          fi
+          echo "Using Web output directory: $WEB_DIR"
+          ls -la "$WEB_DIR"
+          (cd "$WEB_DIR" && zip -r "${{ github.workspace }}/tvbox-web.zip" .)
 
       - name: Upload Web Artifacts
         uses: actions/upload-artifact@v4
@@ -225,7 +255,22 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Linux TV Distribution (ZIP + TAR)
-        run: ./gradlew :app:app-linux-tv:distZip :app:app-linux-tv:distTar --no-daemon --stacktrace
+        run: |
+          # 先执行 installDist，产出完整的 bin/ + lib/ 目录（含全部依赖）
+          ./gradlew :app:app-linux-tv:installDist --no-daemon --stacktrace
+          # 再执行 distZip / distTar（保证 zip/tar 中包含全部运行时依赖）
+          ./gradlew :app:app-linux-tv:distZip :app:app-linux-tv:distTar --no-daemon --stacktrace
+          # 同时用 installDist 的目录再打一份保险 zip（大小更直观）
+          INSTALL_DIR="app/app-linux-tv/build/install/TVBox"
+          if [ -d "$INSTALL_DIR" ]; then
+            (cd "$INSTALL_DIR/.." && zip -r "${{ github.workspace }}/tvbox-linux-tv-full.zip" "TVBox")
+            tar -cf "${{ github.workspace }}/tvbox-linux-tv-full.tar" -C "$INSTALL_DIR/.." "TVBox"
+          fi
+          # 打印 distributions 目录，方便确认大小
+          echo "==== distributions 目录 ===="
+          ls -lh app/app-linux-tv/build/distributions/ || true
+          echo "==== workspace 根 ===="
+          ls -lh "${{ github.workspace }}"/*.zip "${{ github.workspace }}"/*.tar 2>/dev/null || true
 
       - name: Upload Linux TV Distribution
         uses: actions/upload-artifact@v4
@@ -234,6 +279,8 @@ jobs:
           path: |
             app/app-linux-tv/build/distributions/*.zip
             app/app-linux-tv/build/distributions/*.tar
+            tvbox-linux-tv-full.zip
+            tvbox-linux-tv-full.tar
           retention-days: 30
 
   # ===== 汇总发布 (仅 tag 触发) =====
