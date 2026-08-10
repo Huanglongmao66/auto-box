@@ -63,13 +63,16 @@ internal object TvboxJsonResponseParser {
                 val keyName = key
                 val keyShow = (value as? JsonObject)?.safeString("show") ?: key
                 val values: MutableList<VodFilterValue> = mutableListOf()
-                (value as? JsonObject)?.let { vo ->
-                    val itemsArr = (vo["value"] as? JsonArray) ?: (vo["items"] as? JsonArray) ?: continue
-                    for (vi in itemsArr) {
-                        val o = vi as? JsonObject ?: continue
-                        val vv = o.safeString("v") ?: o.safeString("value") ?: continue
-                        val vn = o.safeString("n") ?: o.safeString("name") ?: vv
-                        values.add(VodFilterValue(vv, vn))
+                val vo = (value as? JsonObject)
+                if (vo != null) {
+                    val itemsArr = (vo["value"] as? JsonArray) ?: (vo["items"] as? JsonArray)
+                    if (itemsArr != null) {
+                        for (vi in itemsArr) {
+                            val o = vi as? JsonObject ?: continue
+                            val vv = o.safeString("v") ?: o.safeString("value") ?: continue
+                            val vn = o.safeString("n") ?: o.safeString("name") ?: vv
+                            values.add(VodFilterValue(vv, vn))
+                        }
                     }
                 }
                 if (values.isNotEmpty()) {
