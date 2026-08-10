@@ -165,6 +165,8 @@ fun TVBoxChip(
         ),
         shape = MaterialTheme.shapes.large,
         border = FilterChipDefaults.filterChipBorder(
+            enabled = true,
+            selected = selected,
             borderColor = MaterialTheme.colorScheme.outlineVariant,
             selectedBorderColor = MaterialTheme.colorScheme.primary
         )

@@ -42,8 +42,6 @@ import com.tvbox.core.ui.navigation.AppNavState
 import com.tvbox.core.ui.navigation.AppScaffold
 import com.tvbox.core.ui.navigation.BottomTab
 import com.tvbox.core.ui.navigation.rememberAppNavState
-import com.tvbox.core.ui.navigation.showDetail
-import com.tvbox.core.ui.navigation.showPlayer
 import com.tvbox.core.ui.screens.DetailScreen
 import com.tvbox.core.ui.screens.FavoritesScreen
 import com.tvbox.core.ui.screens.HomeScreen
@@ -102,8 +100,9 @@ fun TVBoxApp(
                         EmptyView(
                             title = "无法播放",
                             description = "未找到对应的影视或剧集",
-                            icon = TVBoxIcons.Outlined.Error
-                        ) { navState.backFromPlayer() }
+                            icon = TVBoxIcons.Outlined.Error,
+                            onAction = { navState.backFromPlayer() }
+                        )
                     }
                 }
                 // 详情页
@@ -130,8 +129,9 @@ fun TVBoxApp(
                         EmptyView(
                             title = "未找到内容",
                             description = "影视资源不存在或已下架",
-                            icon = TVBoxIcons.Outlined.Error
-                        ) { navState.backFromDetail() }
+                            icon = TVBoxIcons.Outlined.Error,
+                            onAction = { navState.backFromDetail() }
+                        )
                     }
                 }
                 // 主导航（首页、搜索、源、收藏、设置）
