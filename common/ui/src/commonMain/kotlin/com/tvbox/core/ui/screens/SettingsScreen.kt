@@ -47,6 +47,7 @@ import com.tvbox.core.ui.components.SettingSwitch
 import com.tvbox.core.ui.icons.OutlinedIcons
 import com.tvbox.core.ui.icons.TVBoxIcons
 import com.tvbox.core.ui.theme.tvTokens
+import kotlinx.coroutines.launch
 
 // ================= 设置页 =================
 
