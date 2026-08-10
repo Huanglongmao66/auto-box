@@ -295,12 +295,21 @@ internal object TvboxJsonResponseParser {
         if (asLong != null) return asLong.toString()
         val asFloat = prim.floatOrNull
         if (asFloat != null) {
-            // 取 2 位小数去除多余零
-            val formatted = if (asFloat == asFloat.toInt().toFloat()) asFloat.toInt().toString()
-            else "%.2f".format(asFloat).trimEnd('0').trimEnd('.')
-            return formatted
+            return formatFloat(asFloat)
         }
         return prim.contentOrNull?.ifBlank { null }
+    }
+
+    private fun formatFloat(f: Float): String {
+        if (f == f.toInt().toFloat()) return f.toInt().toString()
+        // 保留最多 2 位小数，去除尾部 0 和多余小数点
+        val multi = (f * 100).toInt()
+        val str = multi.toString()
+        val decimalPos = str.length - 2
+        val whole = str.substring(0, decimalPos).ifEmpty { "0" }
+        val dec = str.substring(decimalPos)
+        val trimmed = dec.trimEnd('0')
+        return if (trimmed.isEmpty()) whole else "$whole.$trimmed"
     }
 
     private fun JsonObject.safeInt(key: String): Int? {

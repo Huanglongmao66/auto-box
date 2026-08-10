@@ -159,11 +159,17 @@ internal class TvboxSourceClient(
 
     private fun String.encodeUrl(): String {
         val sb = StringBuilder()
+        val hex = "0123456789ABCDEF".toCharArray()
         for (c in this) {
             when (c) {
                 in 'A'..'Z', in 'a'..'z', in '0'..'9',
                 '-', '_', '.', '~' -> sb.append(c)
-                else -> c.toByte().let { sb.append("%%%02X".format(it)) }
+                else -> {
+                    val v = c.code and 0xFF
+                    sb.append('%')
+                    sb.append(hex[v ushr 4])
+                    sb.append(hex[v and 0x0F])
+                }
             }
         }
         return sb.toString()
