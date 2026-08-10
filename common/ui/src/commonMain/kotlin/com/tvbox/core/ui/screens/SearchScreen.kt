@@ -23,8 +23,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -34,6 +33,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.tvbox.core.di.ServiceLocator
 import com.tvbox.core.model.VodInfo
 import com.tvbox.core.ui.components.Badge
 import com.tvbox.core.ui.components.EmptyView
@@ -55,9 +56,14 @@ import com.tvbox.core.ui.components.VodGrid
 import com.tvbox.core.ui.icons.TVBoxIcons
 import com.tvbox.core.ui.mock.MockData
 import com.tvbox.core.ui.theme.tvTokens
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.filter
 
 // ================= 搜索页 =================
 
+@OptIn(FlowPreview::class)
 @Composable
 fun SearchScreen(
     onVodClick: (VodInfo) -> Unit,
@@ -71,18 +77,60 @@ fun SearchScreen(
     var selectedCategories by remember { mutableStateOf(emptyList<String>()) }
     val showResults = query.isNotEmpty()
 
-    // 基于分类过滤的逻辑
-    fun filterByCategories(items: List<VodInfo>): List<VodInfo> {
-        if (selectedCategories.isEmpty()) return items
-        return items.filter { vod ->
-            val source = when {
-                vod in MockData.movieList -> "电影"
-                vod in MockData.dramaList -> "电视剧"
-                vod in MockData.animeList -> "动漫"
-                vod in MockData.trending -> "电影" // trending 混合，默认归入电影
+    // 真实搜索状态
+    var searching by remember { mutableStateOf(false) }
+    val realResults = remember { mutableStateListOf<VodInfo>() }
+    val queryFlow = remember { MutableStateFlow("") }
+
+    // 防抖：用户停止输入 400ms 后发起请求
+    LaunchedEffect(queryFlow) {
+        queryFlow
+            .debounce(400)
+            .filter { it.isNotBlank() }
+            .collect { kw ->
+                searching = true
+                realResults.clear()
+                val repo = runCatching { ServiceLocator.getVodRepository() }.getOrNull()
+                val results = repo?.runCatching { searchContent(kw, 1) }?.getOrNull()
+                    .orEmpty()
+                if (results.isNotEmpty()) {
+                    realResults.addAll(
+                        results.map { r ->
+                            VodInfo(
+                                vodId = r.vodId,
+                                vodName = r.vodName,
+                                vodPic = r.vodPic,
+                                vodRemarks = r.vodRemarks,
+                                sourceKey = r.sourceKey
+                            )
+                        }
+                    )
+                }
+                searching = false
+            }
+    }
+
+    LaunchedEffect(query) {
+        queryFlow.value = query.trim()
+    }
+
+    // Mock 兜底筛选逻辑
+    fun fallbackMockResults(): List<VodInfo> {
+        val raw = (MockData.movieList + MockData.dramaList + MockData.animeList)
+            .filter {
+                query.isBlank() || it.vodName.contains(query, ignoreCase = true)
+                    || it.vodActor.orEmpty().contains(query, ignoreCase = true)
+                    || it.vodDirector.orEmpty().contains(query, ignoreCase = true)
+            }
+        return if (selectedCategories.isEmpty()) raw else raw.filter { v ->
+            val src = when {
+                v in MockData.movieList -> "电影"
+                v in MockData.dramaList -> "电视剧"
+                v in MockData.animeList -> "动漫"
+                v in MockData.trending -> "电影"
                 else -> null
             }
-            source != null && source in selectedCategories
+            src != null && src in selectedCategories
         }
     }
 
@@ -123,25 +171,49 @@ fun SearchScreen(
             // 结果列表
             item {
                 Column {
-                    val allResultsRaw = (MockData.movieList + MockData.dramaList + MockData.animeList)
-                        .filter {
-                            query.isBlank() || it.vodName.contains(query, ignoreCase = true)
-                                || it.vodActor.orEmpty().contains(query, ignoreCase = true)
-                                || it.vodDirector.orEmpty().contains(query, ignoreCase = true)
-                        }
-                    val allResults = filterByCategories(allResultsRaw)
+                    // 合并：优先真实搜索结果，空则 fallback
+                    val merged: List<VodInfo> = if (realResults.isNotEmpty()) {
+                        realResults.toList()
+                    } else if (!searching) {
+                        fallbackMockResults()
+                    } else {
+                        emptyList()
+                    }
                     SectionHeader(
                         title = "搜索结果",
                         action = {
-                            Badge(text = if (allResults.isNotEmpty()) "约 ${allResults.size} 个结果" else "无结果")
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (searching) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(Modifier.width(tokens.spacing.sm))
+                                    Text("搜索中…", style = MaterialTheme.typography.bodySmall)
+                                } else {
+                                    Badge(
+                                        text = if (merged.isNotEmpty())
+                                            "约 ${merged.size} 个结果"
+                                        else "无结果"
+                                    )
+                                }
+                            }
                         }
                     )
                     Spacer(modifier = Modifier.height(tokens.spacing.sm))
-                    if (allResults.isEmpty()) {
+                    if (searching && merged.isEmpty()) {
+                        // 骨架屏
+                        EmptyView(
+                            title = "正在跨源聚合搜索…",
+                            description = "已接入多源搜索，等待结果返回",
+                            icon = TVBoxIcons.Outlined.Search
+                        )
+                    } else if (merged.isEmpty()) {
                         EmptyView(
                             title = "没有找到相关结果",
-                            description = if (selectedCategories.isNotEmpty()) 
-                                "试试调整分类筛选或换个关键字" 
+                            description = if (selectedCategories.isNotEmpty())
+                                "试试调整分类筛选或换个关键字"
                             else "试试换个关键字，或者在影视源中添加更多资源",
                             icon = TVBoxIcons.Outlined.Search
                         )
@@ -154,7 +226,7 @@ fun SearchScreen(
                                 else -> 3
                             }
                             VodGrid(
-                                items = allResults.take(24),
+                                items = merged.take(48),
                                 columns = cols,
                                 onClick = onVodClick,
                                 contentPadding = PaddingValues(0.dp),

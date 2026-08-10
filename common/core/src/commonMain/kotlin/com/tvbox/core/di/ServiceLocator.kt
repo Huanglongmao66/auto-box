@@ -4,6 +4,9 @@ import com.tvbox.core.config.ConfigManager
 import com.tvbox.core.favorite.FavoriteManager
 import com.tvbox.core.history.HistoryManager
 import com.tvbox.core.network.NetworkService
+import com.tvbox.core.repository.DefaultVodRepository
+import com.tvbox.core.repository.TvboxSourceClient
+import com.tvbox.core.repository.VodRepository
 import com.tvbox.core.source.DefaultSourceManager
 import com.tvbox.core.source.SourceManager
 import com.tvbox.core.storage.Database
@@ -41,6 +44,8 @@ object ServiceLocator {
 
     private var sourceManager: SourceManager? = null
 
+    private var vodRepository: VodRepository? = null
+
     /**
      * 跨平台 HTTP 客户端，懒加载以延迟引擎查找。
      *
@@ -71,6 +76,13 @@ object ServiceLocator {
         favoriteManager = FavoriteManager(db.getFavoriteDao())
         configManager = ConfigManager(deviceApi.getStorageManager())
         sourceManager = DefaultSourceManager()
+        vodRepository = DefaultVodRepository(
+            sourceManager = sourceManager!!,
+            client = TvboxSourceClient(
+                networkService = _networkService,
+                sourceManager = sourceManager!!
+            )
+        )
     }
 
     fun getDeviceApi(): DeviceApi = deviceApi ?: notInitialized()
@@ -86,6 +98,8 @@ object ServiceLocator {
     fun getNetworkService(): NetworkService = _networkService
 
     fun getSourceManager(): SourceManager = sourceManager ?: notInitialized()
+
+    fun getVodRepository(): VodRepository = vodRepository ?: notInitialized()
 
     /**
      * 构建配置好的 Ktor HTTP 客户端

@@ -20,6 +20,8 @@ data class MovieSource(
     val quickSearch: String = "",
     /** 分类列表接口 */
     val categories: String = "",
+    /** 播放解析接口（可选）：非直链地址通过此接口二次跳转获取真实 URL */
+    val playerUrl: String = "",
     /** 站点类型 (0=XML, 1=JSON, 3=Spider) */
     val type: Int = 0,
     /** 是否启用 */

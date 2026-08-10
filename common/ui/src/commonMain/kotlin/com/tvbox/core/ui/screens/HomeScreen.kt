@@ -53,7 +53,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.tvbox.core.di.ServiceLocator
+import com.tvbox.core.model.VodClass
 import com.tvbox.core.model.VodInfo
+import com.tvbox.core.repository.HomeContent
 import com.tvbox.core.ui.components.Badge
 import com.tvbox.core.ui.components.PosterPlaceholder
 import com.tvbox.core.ui.components.ScoreBadge
@@ -77,11 +80,45 @@ fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     val tokens = tvTokens()
-    val categories = MockData.categories
-    var selectedCategoryIndex by remember { mutableIntStateOf(0) }
-    var showFullRanking by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
+    // ---- 真实数据加载状态 ----
+    var loading by remember { mutableStateOf(true) }
+    var homeContent by remember { mutableStateOf<HomeContent?>(null) }
+    var selectedCategoryIndex by remember { mutableIntStateOf(0) }
+    var showFullRanking by remember { mutableStateOf(false) }
+
+    // 触发加载：进入页面 + 用户下拉刷新（refreshKey）
+    val refreshKey = remember { mutableIntStateOf(0) }
+    LaunchedEffect(refreshKey.intValue) {
+        loading = true
+        val repo = runCatching { ServiceLocator.getVodRepository() }.getOrNull()
+        val content = repo?.runCatching { getHomeContent() }?.getOrNull()
+        homeContent = content
+        loading = false
+    }
+
+    // 以真实数据为准，不足时使用 Mock 兜底
+    val banners: List<VodInfo> = homeContent?.banners.takeIf { !it.isNullOrEmpty() }
+        ?: MockData.homeBanner
+    val categories: List<VodClass> = homeContent?.categories.takeIf { !it.isNullOrEmpty() }
+        ?: MockData.categories
+    val rankingList: List<VodInfo> = homeContent?.rankingList.takeIf { !it.isNullOrEmpty() }
+        ?: MockData.trending
+    val recMap: Map<String, List<VodInfo>> = homeContent?.categoryRecommendations
+        ?: emptyMap()
+    val recsAllMerged: List<VodInfo> = buildList {
+        val seen = mutableSetOf<String>()
+        for ((_, vs) in recMap) for (v in vs) {
+            val k = v.sourceKey + "|" + v.vodId
+            if (k in seen) continue
+            seen.add(k)
+            add(v)
+        }
+        if (isEmpty()) addAll(MockData.trending + MockData.movieList)
+    }
+    // ---- UI ----
     androidx.compose.foundation.lazy.LazyColumn(
         modifier = modifier.fillMaxSize(),
         state = listState,
@@ -96,7 +133,7 @@ fun HomeScreen(
         // === 精选 Banner ===
         item {
             HomeBanner(
-                items = MockData.homeBanner,
+                items = banners,
                 onClick = onVodClick
             )
         }
@@ -105,25 +142,32 @@ fun HomeScreen(
         item {
             SegmentedTabs(
                 tabs = categories.map { it.typeName },
-                selectedIndex = selectedCategoryIndex,
+                selectedIndex = selectedCategoryIndex.coerceAtMost(categories.size - 1),
                 onSelect = { selectedCategoryIndex = it }
             )
         }
 
         // === 当前分类推荐 ===
         item {
-            val currentName = categories[selectedCategoryIndex].typeName
-            val data = when (currentName) {
-                "电影" -> MockData.movieList
-                "电视剧" -> MockData.dramaList
-                "动漫" -> MockData.animeList
-                else -> MockData.trending + MockData.movieList.take(4)
+            val current = categories.getOrNull(selectedCategoryIndex)
+            val currentName = current?.typeName ?: "推荐"
+            val data = run {
+                val fromRec = recMap[currentName].orEmpty()
+                if (fromRec.isNotEmpty()) fromRec
+                else when (currentName) {
+                    "电影" -> MockData.movieList
+                    "电视剧" -> MockData.dramaList
+                    "动漫" -> MockData.animeList
+                    else -> MockData.trending + MockData.movieList.take(4)
+                }
             }
             Column {
                 SectionHeader(
                     title = "为你推荐·$currentName",
-                    actionText = "全部",
-                    onAction = { selectedCategoryIndex = (selectedCategoryIndex + 1) % categories.size }
+                    actionText = "刷新",
+                    onAction = {
+                        scope.launch { refreshKey.intValue++ }
+                    }
                 )
                 Spacer(modifier = Modifier.height(tokens.spacing.sm))
                 FeaturedRow(items = data, onClick = onVodClick)
@@ -140,7 +184,7 @@ fun HomeScreen(
                 )
                 Spacer(modifier = Modifier.height(tokens.spacing.sm))
                 RankingRow(
-                    items = if (showFullRanking) MockData.trending else MockData.trending.take(5),
+                    items = if (showFullRanking) rankingList else rankingList.take(5),
                     onClick = onVodClick
                 )
             }
@@ -159,7 +203,7 @@ fun HomeScreen(
                         else -> 3
                     }
                     VodGrid(
-                        items = MockData.trending + MockData.movieList,
+                        items = recsAllMerged,
                         columns = cols,
                         onClick = onVodClick,
                         contentPadding = PaddingValues(0.dp),

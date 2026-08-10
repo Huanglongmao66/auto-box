@@ -58,6 +58,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -74,6 +75,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.tvbox.core.di.ServiceLocator
 import com.tvbox.core.model.VodEpisode
 import com.tvbox.core.model.VodInfo
 import com.tvbox.core.ui.components.Badge
@@ -102,20 +104,60 @@ fun DetailScreen(
     modifier: Modifier = Modifier
 ) {
     val tokens = tvTokens()
+    val scope = rememberCoroutineScope()
     var isFavorited by remember { mutableStateOf(false) }
+    var detailLoading by remember { mutableStateOf(false) }
+    var detail by remember(vodInfo) { mutableStateOf(vodInfo) }
     var playSourceIndex by remember { mutableIntStateOf(0) }
     var playLineIndex by remember { mutableIntStateOf(0) }
-    val playLines = listOf("播放线路1", "播放线路2", "备用线路")
-    val episodes = vodInfo.episodes.ifEmpty {
-        MockData.sampleVodDetail().episodes
+    val snackbarHostState = remember { SnackbarHostState() }
+    var showAllRelated by remember { mutableStateOf(false) }
+
+    // 拉取真实详情（只要有 sourceKey + vodId 就尝试拉）
+    LaunchedEffect(vodInfo.vodId, vodInfo.sourceKey) {
+        if (vodInfo.vodId.isBlank() || vodInfo.sourceKey.isBlank()) return@LaunchedEffect
+        detailLoading = true
+        val repo = runCatching { ServiceLocator.getVodRepository() }.getOrNull()
+        val real = runCatching { repo?.getDetailContent(vodInfo.vodId, vodInfo.sourceKey) }.getOrNull()
+        if (real != null) {
+            // 合并字段：保留原有字段 + 真实剧集/简介
+            detail = real.copy(
+                vodName = real.vodName.ifBlank { detail.vodName },
+                vodPic = real.vodPic.ifBlank { detail.vodPic },
+                vodScore = real.vodScore.ifBlank { detail.vodScore }
+            )
+        } else {
+            // 拉不到时，用 sample 里的剧集兜底
+            if (detail.episodes.isEmpty()) {
+                detail = detail.copy(episodes = MockData.sampleVodDetail().episodes)
+            }
+        }
+        detailLoading = false
     }
+
+    val episodes = detail.episodes
     val groupSize = 20
     val episodeGroups = episodes.chunked(groupSize).withIndex().toList()
     var groupIndex by remember { mutableIntStateOf(0) }
     var selectedEpId by remember { mutableStateOf<String?>(null) }
-    var showAllRelated by remember { mutableStateOf(false) }
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
+
+    // 从 episodes 中解析出线路（parseRules[0] 相同的视为同一路）
+    val playLines: List<String> = remember(episodes) {
+        val set = mutableListOf<String>()
+        val seen = mutableSetOf<String>()
+        for (e in episodes) {
+            val line = e.parseRules.firstOrNull() ?: "默认线路"
+            if (line !in seen) {
+                seen.add(line)
+                set.add(line)
+            }
+        }
+        set.ifEmpty { listOf("播放线路1") }
+    }
+    val currentLine = playLines.getOrNull(playLineIndex) ?: playLines.first()
+    val currentLineEpisodes = episodes.filter { (it.parseRules.firstOrNull() ?: "默认线路") == currentLine }
+    val displayEpisodes = currentLineEpisodes.ifEmpty { episodes }
+    val displayGroups = displayEpisodes.chunked(groupSize).withIndex().toList()
 
     Box(modifier = modifier.fillMaxSize()) {
         androidx.compose.foundation.lazy.LazyColumn(
@@ -154,15 +196,15 @@ fun DetailScreen(
         // Hero 海报 + 信息头
         item {
             DetailHero(
-                vod = vodInfo,
+                vod = detail,
                 isFavorited = isFavorited,
                 onToggleFavorite = { isFavorited = !isFavorited },
-                onPlayNow = { onPlayClick(episodes.firstOrNull() ?: return@DetailHero Unit) }
+                onPlayNow = { onPlayClick(displayEpisodes.firstOrNull() ?: return@DetailHero Unit) }
             )
         }
 
         // 播放线路切换
-        if (episodes.isNotEmpty()) {
+        if (displayEpisodes.isNotEmpty()) {
             item {
                 Column(modifier = Modifier.padding(horizontal = tokens.spacing.lg)) {
                     SectionHeader(title = "播放线路", action = {
@@ -170,7 +212,7 @@ fun DetailScreen(
                             SegmentedTabs(
                                 tabs = playLines,
                                 selectedIndex = playLineIndex,
-                                onSelect = { playLineIndex = it },
+                                onSelect = { playLineIndex = it; groupIndex = 0 },
                                 modifier = Modifier.width(400.dp)
                             )
                         }
@@ -181,17 +223,17 @@ fun DetailScreen(
             item {
                 Column(modifier = Modifier.padding(horizontal = tokens.spacing.lg)) {
                     // 分组
-                    if (episodeGroups.size > 1) {
+                    if (displayGroups.size > 1) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(tokens.spacing.sm)
                         ) {
-                            episodeGroups.forEachIndexed { i, (_, list) ->
+                            displayGroups.forEachIndexed { i, (_, list) ->
                                 val label = buildString {
-                                    val first = list.first().name
-                                    val last = list.last().name
+                                    val first = list.first().name.substringAfterLast(" · ")
+                                    val last = list.last().name.substringAfterLast(" · ")
                                     append(first)
                                     if (first != last) append("-").append(last)
                                 }
@@ -207,7 +249,7 @@ fun DetailScreen(
                         Spacer(modifier = Modifier.height(tokens.spacing.md))
                     }
                     // 选集网格
-                    val currentList = episodeGroups.getOrNull(groupIndex)?.value ?: episodes
+                    val currentList = displayGroups.getOrNull(groupIndex)?.value ?: displayEpisodes
                     EpisodeGrid(
                         items = currentList,
                         selectedId = selectedEpId,
@@ -227,14 +269,14 @@ fun DetailScreen(
                 Spacer(modifier = Modifier.height(tokens.spacing.sm))
                 var expanded by remember { mutableStateOf(false) }
                 Text(
-                    text = vodInfo.vodContent.ifBlank { "暂无简介" },
+                    text = detail.vodContent.ifBlank { "暂无简介" },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = MaterialTheme.typography.bodyLarge.lineHeight,
                     maxLines = if (expanded) Int.MAX_VALUE else 4,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (vodInfo.vodContent.length > 80) {
+                if (detail.vodContent.length > 80) {
                     Spacer(modifier = Modifier.height(tokens.spacing.xs))
                     TextButton(onClick = { expanded = !expanded }, contentPadding = PaddingValues(0.dp)) {
                         Text(
@@ -248,22 +290,22 @@ fun DetailScreen(
         }
 
         // 演职人员
-        if (vodInfo.vodActor.isNotEmpty() || vodInfo.vodDirector.isNotEmpty()) {
+        if (detail.vodActor.isNotEmpty() || detail.vodDirector.isNotEmpty()) {
             item {
                 Column(modifier = Modifier.padding(horizontal = tokens.spacing.lg)) {
                     SectionHeader(title = "演职人员")
                     Spacer(modifier = Modifier.height(tokens.spacing.sm))
                     SettingGroup(title = "主创团队") {
-                        if (vodInfo.vodDirector.isNotEmpty())
+                        if (detail.vodDirector.isNotEmpty())
                             com.tvbox.core.ui.components.SettingItem(
                                 title = "导演",
-                                trailing = vodInfo.vodDirector,
+                                trailing = detail.vodDirector,
                                 icon = TVBoxIcons.Outlined.Edit
                             )
-                        if (vodInfo.vodActor.isNotEmpty())
+                        if (detail.vodActor.isNotEmpty())
                             com.tvbox.core.ui.components.SettingItem(
                                 title = "主演",
-                                trailing = vodInfo.vodActor.take(20),
+                                trailing = detail.vodActor.take(20),
                                 icon = TVBoxIcons.Outlined.List
                             )
                     }
@@ -531,13 +573,44 @@ fun PlayerScreen(
     val tokens = tvTokens()
     var isPlaying by remember { mutableStateOf(true) }
     var isFullscreen by remember { mutableStateOf(false) }
-    var position by remember { mutableIntStateOf(1800_000) } // 已播放毫秒（示例30分钟）
-    val duration = 60 * 60 * 1000 // 1小时示例
+    var position by remember { mutableIntStateOf(0) }
+    var duration by remember { mutableIntStateOf(60 * 60 * 1000) }
     var volume by remember { mutableIntStateOf(70) }
     var showControls by remember { mutableStateOf(true) }
     var panel by remember { mutableStateOf("none") } // "none" / "episodes" / "tracks"
 
-    val progressF = (position.toFloat() / duration).coerceIn(0f, 1f)
+    // 真实播放地址解析
+    var resolving by remember { mutableStateOf(false) }
+    var resolvedUrl by remember(episode.episodeId) { mutableStateOf(episode.url) }
+    var resolveError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(episode.episodeId, vodInfo.sourceKey) {
+        // 如果是直链，跳过
+        if (isDirectPlayUrl(episode.url)) {
+            resolvedUrl = episode.url
+            return@LaunchedEffect
+        }
+        resolving = true
+        resolveError = null
+        val repo = runCatching { ServiceLocator.getVodRepository() }.getOrNull()
+        val flag = episode.parseRules.firstOrNull()
+            ?: vodInfo.playerFlag
+            ?: vodInfo.episodes.firstOrNull()?.parseRules?.firstOrNull()
+            ?: "default"
+        val real = runCatching {
+            repo?.getPlayerContent(flag, episode.url, vodInfo.sourceKey)
+        }.getOrNull()
+        if (real.isNullOrBlank()) {
+            resolveError = "无法解析播放地址，显示原始地址"
+            resolvedUrl = episode.url
+        } else {
+            resolvedUrl = real
+        }
+        resolving = false
+    }
+
+    val progressF = if (duration <= 0) 0f else (position.toFloat() / duration).coerceIn(0f, 1f)
+    val canPlay = resolvedUrl.isNotBlank()
 
     Column(
         modifier = modifier
@@ -558,29 +631,98 @@ fun PlayerScreen(
                     )
                 ))
         ) {
-            // 中心图标（播放器占位）
+            // 中心图标（播放器占位）+ 真实播放地址
             Column(
                 modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Icon(
-                    imageVector = TVBoxIcons.Outlined.PlayArrow,
-                    contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.8f),
-                    modifier = Modifier.size(96.dp)
-                )
-                Spacer(modifier = Modifier.height(tokens.spacing.md))
-                Text(
-                    text = vodInfo.vodName,
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = Color.White
-                )
-                Text(
-                    text = "正在播放：${episode.name}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.7f)
-                )
+                if (resolving) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.size(72.dp),
+                        strokeWidth = 4.dp
+                    )
+                    Spacer(modifier = Modifier.height(tokens.spacing.md))
+                    Text(
+                        text = "正在解析播放地址…",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White
+                    )
+                    Text(
+                        text = vodInfo.vodName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                } else {
+                    Icon(
+                        imageVector = TVBoxIcons.Outlined.PlayArrow,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier.size(96.dp)
+                    )
+                    Spacer(modifier = Modifier.height(tokens.spacing.md))
+                    Text(
+                        text = vodInfo.vodName,
+                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = Color.White
+                    )
+                    Text(
+                        text = "正在播放：${episode.name}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                    Spacer(modifier = Modifier.height(tokens.spacing.md))
+                    // 真实播放地址展示
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 24.dp)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White.copy(alpha = 0.08f))
+                            .padding(tokens.spacing.md)
+                    ) {
+                        Column {
+                            val hintColor = Color.White.copy(alpha = 0.85f)
+                            Row {
+                                Badge(
+                                    text = if (resolveError != null) "解析降级"
+                                    else if (isDirectPlayUrl(resolvedUrl)) "直链"
+                                    else "已解析",
+                                    color = if (resolveError != null) Color(0xFFFFB74D) else MaterialTheme.colorScheme.primary
+                                )
+                                if (isPlaying) {
+                                    Spacer(Modifier.width(tokens.spacing.sm))
+                                    Badge(
+                                        text = "播放中",
+                                        color = Color(0xFF4CAF50)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(tokens.spacing.sm))
+                            Text(
+                                text = "播放地址：",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.6f)
+                            )
+                            Text(
+                                text = if (resolvedUrl.isBlank()) "(空)" else resolvedUrl,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = hintColor,
+                                maxLines = 4,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (resolveError != null) {
+                                Spacer(Modifier.height(tokens.spacing.xs))
+                                Text(
+                                    text = resolveError!!,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFFFFB74D)
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             // 顶部控制条（仅在 controls 显示时）
@@ -812,6 +954,14 @@ private fun formatMs(ms: Int): String {
     val s = total % 60
     fun pad2(n: Int) = if (n < 10) "0$n" else n.toString()
     return if (h > 0) "$h:${pad2(m)}:${pad2(s)}" else "${pad2(m)}:${pad2(s)}"
+}
+
+/** 判断是否为可直接播放的视频直链 */
+private fun isDirectPlayUrl(url: String): Boolean {
+    val lower = url.lowercase()
+    val directExtensions = listOf(".m3u8", ".mp4", ".mkv", ".flv", ".webm", ".ts", ".mov", ".avi", ".rmvb", ".wmv", ".m4v")
+    if (directExtensions.any { lower.contains(it) }) return true
+    return false
 }
 
 @Composable
