@@ -525,7 +525,8 @@ private fun AddSourceDialog(
                     Button(
                         onClick = {
                             if (name.isNotBlank() && api.isNotBlank()) {
-                                val finalKey = if (key.isBlank()) "csp_${System.currentTimeMillis()}" else key
+                                val ts = com.tvbox.utils.DateUtils.currentTimeMillis()
+                                val finalKey = if (key.isBlank()) "csp_$ts" else key
                                 onAdd(
                                     MovieSource(
                                         key = finalKey,
@@ -535,7 +536,7 @@ private fun AddSourceDialog(
                                         enabled = true,
                                         searchable = true,
                                         filterable = selectedType == 1,
-                                        order = System.currentTimeMillis().toInt() % 1000
+                                        order = (ts % 1000).toInt()
                                     )
                                 )
                             }
