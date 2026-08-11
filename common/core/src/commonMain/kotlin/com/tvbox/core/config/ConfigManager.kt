@@ -5,6 +5,9 @@ import com.tvbox.core.model.ProxyConfig
 import com.tvbox.deviceapi.storage.StorageManager
 import com.tvbox.utils.JsonUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 
 /**
@@ -20,6 +23,22 @@ class ConfigManager(private val storageManager: StorageManager) {
     /** 配置文件名 */
     private val configFileName = "app_config.json"
 
+    private val _configFlow = MutableStateFlow(AppConfig())
+    val configFlow: StateFlow<AppConfig> = _configFlow.asStateFlow()
+
+    private var loaded = false
+
+    private suspend fun ensureLoaded() {
+        if (!loaded) {
+            loaded = true
+            val path = configFilePath()
+            if (storageManager.exists(path)) {
+                val json = storageManager.readFile(path)
+                _configFlow.value = JsonUtils.fromJsonSafe(json) ?: AppConfig()
+            }
+        }
+    }
+
     /**
      * 读取应用配置
      *
@@ -28,12 +47,8 @@ class ConfigManager(private val storageManager: StorageManager) {
      * @return 应用配置
      */
     suspend fun getConfig(): AppConfig = withContext(Dispatchers.Default) {
-        val path = configFilePath()
-        if (!storageManager.exists(path)) {
-            return@withContext AppConfig()
-        }
-        val json = storageManager.readFile(path)
-        JsonUtils.fromJsonSafe(json) ?: AppConfig()
+        ensureLoaded()
+        _configFlow.value
     }
 
     /**
@@ -45,6 +60,8 @@ class ConfigManager(private val storageManager: StorageManager) {
      */
     suspend fun saveConfig(config: AppConfig) {
         withContext(Dispatchers.Default) {
+            loaded = true
+            _configFlow.value = config
             storageManager.writeFile(configFilePath(), JsonUtils.toJson(config))
         }
     }
@@ -60,6 +77,8 @@ class ConfigManager(private val storageManager: StorageManager) {
             if (storageManager.exists(path)) {
                 storageManager.delete(path)
             }
+            loaded = true
+            _configFlow.value = AppConfig()
         }
     }
 
@@ -105,6 +124,22 @@ class ConfigManager(private val storageManager: StorageManager) {
     suspend fun updateProxyConfig(proxy: ProxyConfig): AppConfig {
         val config = getConfig()
         val updated = config.copy(proxy = proxy)
+        saveConfig(updated)
+        return updated
+    }
+
+    /**
+     * 通用配置更新方法
+     *
+     * 读取当前配置，通过 block 函数转换后保存并返回。
+     * 适用于任意字段的增量更新，避免为每个字段单独写方法。
+     *
+     * @param block 配置转换函数，传入当前配置，返回更新后的配置
+     * @return 更新后的应用配置
+     */
+    suspend fun update(block: (AppConfig) -> AppConfig): AppConfig {
+        val config = getConfig()
+        val updated = block(config)
         saveConfig(updated)
         return updated
     }

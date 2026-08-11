@@ -21,6 +21,16 @@ kotlin {
             implementation(compose.materialIconsExtended)
             implementation(compose.ui)
             implementation(compose.components.resources)
+            implementation(libs.coil.compose)
+        }
+        androidMain.dependencies {
+            // 直播播放器需要真正的 ExoPlayer + PlayerView 渲染
+            implementation(project(":platform:android"))
+            implementation(libs.media3.exoplayer)
+            implementation(libs.media3.ui)
+            implementation(libs.media3.hls)
+            // BackHandler 需要 activity-compose
+            implementation("androidx.activity:activity-compose:1.9.3")
         }
     }
 }

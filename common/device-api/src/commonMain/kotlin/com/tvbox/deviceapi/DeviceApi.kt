@@ -110,6 +110,32 @@ interface DeviceApi {
      */
     fun exitApp()
 
+    // ===== 屏幕方向 =====
+
+    /**
+     * 设置当前 Activity 的屏幕方向。
+     *
+     * 业务层可在进入/退出播放器时调用，实现横竖屏自动或手动切换。
+     * 默认空实现，仅 Android 等支持方向控制的平台覆盖。
+     */
+    fun setScreenOrientation(orientation: ScreenOrientation) {}
+
+    /**
+     * 获取当前屏幕方向，无法识别时返回 [ScreenOrientation.UNSPECIFIED]。
+     */
+    fun getScreenOrientation(): ScreenOrientation = ScreenOrientation.UNSPECIFIED
+
+    /**
+     * 是否已锁定屏幕方向（锁定后不再随视频尺寸/重力自动切换）。
+     */
+    fun isOrientationLocked(): Boolean = false
+
+    /**
+     * 锁定/解锁屏幕方向。锁定后 [setScreenOrientation] 的自动调用将被忽略，
+     * 但用户手动点击锁定按钮时仍可切换状态。
+     */
+    fun setOrientationLocked(locked: Boolean) {}
+
     // ===== 日志 =====
 
     /**
@@ -144,4 +170,20 @@ enum class LogLevel {
     INFO,
     WARN,
     ERROR
+}
+
+/**
+ * 屏幕方向
+ */
+enum class ScreenOrientation {
+    /** 未指定 / 跟随系统 */
+    UNSPECIFIED,
+    /** 竖屏 */
+    PORTRAIT,
+    /** 横屏 */
+    LANDSCAPE,
+    /** 跟随重力（横屏，反向横屏） */
+    SENSOR,
+    /** 跟随重力（横竖屏全部方向） */
+    FULL_SENSOR
 }

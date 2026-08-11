@@ -31,17 +31,21 @@ internal class DefaultVodRepository(
 
         // 并行请求所有源的首页内容
         val results = sources.map { src ->
-            async { runCatching { client.home(src) }.getOrNull() }
+            async {
+                runCatching { client.home(src) }.getOrNull()
+            }
         }.awaitAll().filterNotNull()
 
         val banners: MutableList<VodInfo> = mutableListOf()
         val recMap: MutableMap<String, MutableList<VodInfo>> = mutableMapOf()
         val ranking: MutableList<VodInfo> = mutableListOf()
         val categorySet: MutableList<VodClass> = mutableListOf()
+        var logo = ""
 
         val seenIds = mutableSetOf<String>()
 
         for (r in results) {
+            if (logo.isBlank() && r.logo.isNotBlank()) logo = r.logo
             // 分类聚合
             for (c in r.categories) {
                 if (categorySet.none { it.typeId == c.typeId }) categorySet.add(c)
@@ -74,6 +78,7 @@ internal class DefaultVodRepository(
         cachedCategories = categorySet.toList()
 
         HomeContent(
+            logo = logo,
             banners = banners.toList(),
             categories = categorySet.toList(),
             categoryRecommendations = recMap,

@@ -13,7 +13,10 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.VideoSize
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import com.tvbox.deviceapi.player.IPlayer
 import com.tvbox.deviceapi.player.PlayerListener
@@ -26,6 +29,9 @@ import java.util.concurrent.CopyOnWriteArraySet
  *
  * 兼容原版 TVBox 播放内核能力，支持 HLS / MP4 等主流格式、
  * 播放速度与音量控制、音轨 / 字幕切换以及外部字幕加载。
+ *
+ * 通过 [DefaultHttpDataSource.Factory] 设置默认请求头与 UA，
+ * 保证直播源（防盗链 / Referer 限制）与伪装后的订阅源均可拉取。
  *
  * @param context Android 上下文
  */
@@ -59,6 +65,20 @@ class ExoPlayerImpl(
 
     /** 字幕 ID -> ExoPlayer 轨道引用映射 */
     private val subtitleTrackMap = mutableMapOf<Int, TrackRef>()
+
+    /** HTTP 数据源工厂（设置默认请求头 + UA） */
+    private val httpDataSourceFactory: DefaultHttpDataSource.Factory by lazy {
+        DefaultHttpDataSource.Factory()
+            .setUserAgent(PLAYER_USER_AGENT)
+            .setConnectTimeoutMs(CONNECT_TIMEOUT_MS)
+            .setReadTimeoutMs(READ_TIMEOUT_MS)
+            .setAllowCrossProtocolRedirects(true)
+    }
+
+    /** DataSource 组合工厂：默认（本地 assets/file/content） + HTTP */
+    private val dataSourceFactory: DefaultDataSource.Factory by lazy {
+        DefaultDataSource.Factory(context, httpDataSourceFactory)
+    }
 
     /** 播放进度轮询任务 */
     private val progressRunnable = object : Runnable {
@@ -108,7 +128,9 @@ class ExoPlayerImpl(
     }
 
     init {
+        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
         player = ExoPlayer.Builder(context)
+            .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(AudioAttributes.DEFAULT, /* handleAudioFocus = */ true)
             .setHandleAudioBecomingNoisy(true)
             .build()
@@ -119,12 +141,26 @@ class ExoPlayerImpl(
 
     override fun setDataSource(url: String, headers: Map<String, String>, subtitleUrl: String?) {
         externalSubtitleUrl = subtitleUrl
-        val builder = MediaItem.Builder().setUri(url)
 
+        // 注入当前请求的自定义请求头（合并到默认 UA）
         if (headers.isNotEmpty()) {
-            // Media3 1.4.x: 请求头通过 DataSource.Factory 设置，MediaItem 不再直接支持
-            // TODO: 后续通过 DefaultHttpDataSource.Factory.setDefaultRequestProperties 注入
+            val merged = buildMap<String, String> {
+                // 用户自定义头优先（覆盖默认）
+                putAll(headers)
+                // 若调用方未指定 UA，则使用播放器内置 UA
+                if (!keys.any { it.equals("User-Agent", ignoreCase = true) }) {
+                    put("User-Agent", PLAYER_USER_AGENT)
+                }
+            }
+            httpDataSourceFactory.setDefaultRequestProperties(merged)
+        } else {
+            // 无自定义头，仅保留播放器 UA
+            httpDataSourceFactory.setDefaultRequestProperties(
+                mapOf("User-Agent" to PLAYER_USER_AGENT)
+            )
         }
+
+        val builder = MediaItem.Builder().setUri(url)
 
         val subtitleConfigs = buildSubtitleConfigurations(subtitleUrl)
         if (subtitleConfigs.isNotEmpty()) {
@@ -134,6 +170,8 @@ class ExoPlayerImpl(
         val item = builder.build()
         mediaItem = item
         player?.run {
+            stop()
+            clearMediaItems()
             setMediaItem(item)
             prepare()
         }
@@ -203,6 +241,13 @@ class ExoPlayerImpl(
             renderView.player = player
         }
     }
+
+    /**
+     * 暴露底层 ExoPlayer 实例，供 Compose AndroidView 直接绑定 PlayerView 渲染。
+     *
+     * 仅用于 UI 层渲染绑定，调用方不得在此实例上执行 release 等破坏生命周期的操作。
+     */
+    fun getExoPlayer(): ExoPlayer? = player
 
     // ===== 音轨 / 字幕 =====
 
@@ -276,13 +321,14 @@ class ExoPlayerImpl(
 
     override fun setExternalSubtitle(url: String) {
         externalSubtitleUrl = url
-        // 在当前媒体项上追加字幕配置后重新加载
         val current = mediaItem ?: return
         val newItem = current.buildUpon()
             .setSubtitleConfigurations(buildSubtitleConfigurations(url))
             .build()
         mediaItem = newItem
         player?.run {
+            stop()
+            clearMediaItems()
             setMediaItem(newItem)
             prepare()
         }
@@ -300,16 +346,10 @@ class ExoPlayerImpl(
 
     // ===== 内部辅助 =====
 
-    /**
-     * 向所有业务监听器分发事件
-     */
     private inline fun notify(block: (PlayerListener) -> Unit) {
         listeners.forEach { listener -> runCatching { block(listener) } }
     }
 
-    /**
-     * 构建字幕配置列表
-     */
     private fun buildSubtitleConfigurations(subtitleUrl: String?): List<MediaItem.SubtitleConfiguration> {
         if (subtitleUrl.isNullOrBlank()) return emptyList()
         return listOf(
@@ -319,9 +359,6 @@ class ExoPlayerImpl(
         )
     }
 
-    /**
-     * 根据文件扩展名猜测字幕 MIME 类型
-     */
     private fun guessSubtitleMimeType(url: String): String {
         val ext = url.substringAfterLast('.', "").lowercase()
         return when (ext) {
@@ -333,9 +370,6 @@ class ExoPlayerImpl(
         }
     }
 
-    /**
-     * ExoPlayer 轨道引用，用于音轨 / 字幕选择
-     */
     private data class TrackRef(
         val group: androidx.media3.common.TrackGroup,
         val trackIndex: Int
@@ -349,5 +383,11 @@ class ExoPlayerImpl(
         private const val VOLUME_DEFAULT = 1.0f
         private const val VOLUME_MIN = 0.0f
         private const val VOLUME_MAX = 1.0f
+        private const val CONNECT_TIMEOUT_MS = 15_000
+        private const val READ_TIMEOUT_MS = 30_000
+
+        /** 播放器专用浏览器 User-Agent（避免被 Cloudflare 等防护拦截） */
+        private const val PLAYER_USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
     }
 }

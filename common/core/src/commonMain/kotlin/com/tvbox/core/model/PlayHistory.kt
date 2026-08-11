@@ -67,6 +67,58 @@ data class HotSearch(
 )
 
 /**
+ * 用户自定义影视源
+ *
+ * 兼容 TVBoxOS 标准 sites 数组格式，扩展字段保留 Spider/CSP/JS 源所需信息。
+ * - type=0: XML 源
+ * - type=1: JSON 源（MacCMS 标准接口）
+ * - type=3: Spider/CSP 源（Jar/JS/Py 爬虫）
+ * - type=4: 新协议（带 ext 过滤参数的 JSON 源）
+ */
+@Serializable
+data class UserVodSource(
+    val key: String,
+    val name: String,
+    val api: String,
+    val enabled: Boolean = true,
+    /** 站点类型 (0=XML, 1=JSON, 3=Spider, 4=带过滤的JSON) */
+    val type: Int = 1,
+    /** 是否可搜索 (1=可搜索) */
+    val searchable: Int = 1,
+    /** 是否可快速搜索 */
+    val quickSearch: Int = 1,
+    /** 是否可过滤分类 */
+    val filterable: Int = 1,
+    /** 站点解析 URL */
+    val playerUrl: String = "",
+    /** 扩展数据（Spider 的 ext 配置，可以是 JSON 字符串或 URL） */
+    val ext: String = "",
+    /** 自定义 Jar URL（Spider 源使用） */
+    val jar: String = "",
+    /** 站点播放器类型 (0=system, 1=ijk, 2=exo, 10=mxplayer, -1=跟随设置) */
+    val playerType: Int = -1,
+    /** 站点超时时间（秒） */
+    val timeout: Int = 0,
+    /** 需要点击播放的嗅探站点 selector */
+    val clickSelector: String = "",
+    /** 展示风格 */
+    val style: String = "",
+    /** 自定义分类排序 */
+    val categories: List<String> = emptyList()
+)
+
+/**
+ * 用户自定义直播源
+ */
+@Serializable
+data class UserLiveSource(
+    val key: String,
+    val name: String,
+    val url: String,
+    val enabled: Boolean = true
+)
+
+/**
  * 应用配置
  */
 @Serializable
@@ -92,7 +144,37 @@ data class AppConfig(
     /** 主题模式 (light/dark/auto) */
     val themeMode: String = "auto",
     /** 首页布局模式 */
-    val homeLayout: String = "grid"
+    val homeLayout: String = "grid",
+    /** API 地址列表 */
+    val apiUrls: List<String> = emptyList(),
+    /** 当前选中的 API 索引 */
+    val currentApiIndex: Int = 0,
+    /** 用户自定义影视源列表 */
+    val vodSources: List<UserVodSource> = emptyList(),
+    /** 当前选中的影视源 key */
+    val currentVodKey: String = "",
+    /** 用户自定义直播源列表 */
+    val liveSources: List<UserLiveSource> = emptyList(),
+    /** 当前选中的直播源 key */
+    val currentLiveKey: String = "",
+    /** 壁纸索引 */
+    val wallpaperIndex: Int = 0,
+    /** 搜索历史 */
+    val searchHistory: List<String> = emptyList(),
+    /** 是否深色模式 */
+    val isDarkMode: Boolean = true,
+    /** 是否跳过片头 */
+    val skipTitle: Boolean = true,
+    /** 是否保持画面比例 */
+    val keepRatio: Boolean = true,
+    /** 是否开启 HDR 增强 */
+    val hdrEnhance: Boolean = false,
+    /** 主题色种子（用于主题预设） */
+    val themeColorSeed: Int = 0,
+    /** 首页卡片样式（0=标准卡片, 1=紧凑卡片, 2=大号卡片） */
+    val cardStyle: Int = 0,
+    /** 是否显示评分角标 */
+    val showScoreBadge: Boolean = true
 )
 
 /**

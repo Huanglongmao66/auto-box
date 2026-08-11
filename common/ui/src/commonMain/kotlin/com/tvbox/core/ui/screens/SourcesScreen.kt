@@ -63,7 +63,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.tvbox.core.di.ServiceLocator
 import com.tvbox.core.model.MovieSource
+import com.tvbox.core.model.UserVodSource
 import com.tvbox.core.ui.components.Badge
 import com.tvbox.core.ui.components.EmptyView
 import com.tvbox.core.ui.components.SearchBar
@@ -131,36 +133,102 @@ fun SourcesScreen(modifier: Modifier = Modifier) {
                             title = name,
                             subtitle = url,
                             icon = TVBoxIcons.Outlined.Language,
-                            trailing = if (isImporting) "导入中…" else "已订阅",
+                            trailing = if (isImporting) "解析中…" else "已订阅",
                             onClick = {
                                 if (isImporting) return@SettingItem
                                 importingUrl = url
                                 scope.launch {
+                                    val configManager = try { ServiceLocator.getConfigManager() } catch (_: Throwable) { null }
+                                    val parser = try { ServiceLocator.getApiSubscriptionParser() } catch (_: Throwable) { null }
+                                    val srcMgr = try { ServiceLocator.getSourceManager() } catch (_: Throwable) { null }
+                                    val liveMgr = try { ServiceLocator.getLiveSourceManager() } catch (_: Throwable) { null }
                                     try {
-                                        // 使用内置 HTTP 请求拉取订阅内容
-                                        val raw = fetchSubscription(url)
-                                        val manager = com.tvbox.core.source.DefaultSourceManager()
-                                        // 先导入现有源
-                                        MockData.movieSources.forEach { manager.addSource(it) }
-                                        // 解析并导入订阅源
-                                        val imported = manager.importFromJson(raw)
-                                        if (imported.isNotEmpty()) {
-                                            allSources.clear()
-                                            allSources.addAll(manager.getSources())
+                                        // 使用 ApiSubscriptionParser 统一解析（支持单仓/多仓/图片伪装/Base64）
+                                        val result = parser?.parse(url)
+                                        if (result == null) {
                                             snackbarHostState.showSnackbar(
-                                                "$name 导入成功，共 ${imported.size} 个源",
+                                                "解析服务未初始化",
                                                 duration = SnackbarDuration.Short
+                                            )
+                                        } else if (!result.isSuccess) {
+                                            snackbarHostState.showSnackbar(
+                                                "$name 解析失败：${result.error ?: "未知错误"}",
+                                                duration = SnackbarDuration.Long
                                             )
                                         } else {
-                                            snackbarHostState.showSnackbar(
-                                                "$name 解析失败，可能格式不兼容",
-                                                duration = SnackbarDuration.Short
-                                            )
+                                            val vodS = result.vodSources
+                                            val liveS = result.liveSources
+                                            if (vodS.isEmpty() && liveS.isEmpty()) {
+                                                snackbarHostState.showSnackbar(
+                                                    "$name 未解析到任何订阅源",
+                                                    duration = SnackbarDuration.Long
+                                                )
+                                            } else {
+                                                // 1. 同步点播源到 ServiceLocator SourceManager（过滤有效 HTTP JSON 源）
+                                                if (vodS.isNotEmpty() && srcMgr != null) {
+                                                    try { srcMgr.syncFromUserSources(vodS) } catch (_: Throwable) {}
+                                                    // 刷新当前页面源列表（MovieSource 形式）
+                                                    allSources.clear()
+                                                    allSources.addAll(srcMgr.getSources())
+                                                }
+                                                // 2. 同步直播源到 LiveSourceManager（第一个启用）
+                                                if (liveS.isNotEmpty()) {
+                                                    val firstLive = liveS.firstOrNull { it.enabled } ?: liveS.first()
+                                                    liveMgr?.setSubscriptionUrl(firstLive.url)
+                                                }
+                                                // 3. 持久化到 ConfigManager
+                                                if (configManager != null) {
+                                                    val cfg = try { configManager.getConfig() } catch (_: Throwable) { null }
+                                                    if (cfg != null) {
+                                                        val curVodKey = run {
+                                                            val cur = cfg.currentVodKey
+                                                            if (vodS.any { it.key == cur }) cur
+                                                            else vodS.firstOrNull { it.enabled }?.key
+                                                                ?: vodS.firstOrNull()?.key ?: ""
+                                                        }
+                                                        val normalizedVod = vodS.map { v: UserVodSource ->
+                                                            v.copy(enabled = (v.key == curVodKey))
+                                                        }
+                                                        val curLiveKey = run {
+                                                            val cur = cfg.currentLiveKey
+                                                            if (liveS.any { it.key == cur }) cur
+                                                            else liveS.firstOrNull { it.enabled }?.key
+                                                                ?: liveS.firstOrNull()?.key ?: ""
+                                                        }
+                                                        val normalizedLive = liveS.map { l ->
+                                                            l.copy(enabled = (l.key == curLiveKey))
+                                                        }
+                                                        val curApiIdx = run {
+                                                            val cur = cfg.apiUrls.indexOf(url)
+                                                            if (cur >= 0) cur else cfg.currentApiIndex.coerceIn(0, (cfg.apiUrls.size - 1).coerceAtLeast(0))
+                                                        }
+                                                        try {
+                                                            configManager.update { c ->
+                                                                c.copy(
+                                                                    apiUrls = if (url in c.apiUrls) c.apiUrls else c.apiUrls + url,
+                                                                    currentApiIndex = curApiIdx,
+                                                                    vodSources = normalizedVod,
+                                                                    currentVodKey = curVodKey,
+                                                                    liveSources = normalizedLive,
+                                                                    currentLiveKey = curLiveKey
+                                                                )
+                                                            }
+                                                        } catch (_: Throwable) {}
+                                                    }
+                                                }
+                                                // 4. 提示解析结果
+                                                val msg = buildString {
+                                                    append("$name 解析成功：")
+                                                    if (vodS.isNotEmpty()) append("点播源 ${vodS.size} 个 ")
+                                                    if (liveS.isNotEmpty()) append("直播源 ${liveS.size} 个")
+                                                }
+                                                snackbarHostState.showSnackbar(msg, duration = SnackbarDuration.Long)
+                                            }
                                         }
-                                    } catch (e: Exception) {
+                                    } catch (e: Throwable) {
                                         snackbarHostState.showSnackbar(
-                                            "$name 导入失败：${e.message ?: "网络错误"}",
-                                            duration = SnackbarDuration.Short
+                                            "$name 解析异常：${e.message ?: "网络错误"}",
+                                            duration = SnackbarDuration.Long
                                         )
                                     } finally {
                                         importingUrl = null
@@ -652,17 +720,4 @@ private fun AddSubscriptionDialog(
             }
         }
     }
-}
-
-// ================= 订阅网络拉取 =================
-
-/**
- * 拉取订阅内容
- *
- * 使用 Ktor HTTP 客户端发起 GET 请求，返回响应文本。
- * 在 commonMain 中通过 expect/actual 或 ServiceLocator 获取 HTTP 客户端。
- */
-private suspend fun fetchSubscription(url: String): String {
-    val networkService = com.tvbox.core.di.ServiceLocator.getNetworkService()
-    return networkService.get(url, mapOf("User-Agent" to "Mozilla/5.0 (TVBox-Multiplatform/1.0)"))
 }

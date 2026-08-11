@@ -3,12 +3,18 @@ package com.tvbox.core.di
 import com.tvbox.core.config.ConfigManager
 import com.tvbox.core.favorite.FavoriteManager
 import com.tvbox.core.history.HistoryManager
+import com.tvbox.core.model.MovieSource
+import com.tvbox.core.model.UserVodSource
 import com.tvbox.core.network.NetworkService
 import com.tvbox.core.repository.DefaultVodRepository
 import com.tvbox.core.repository.TvboxSourceClient
 import com.tvbox.core.repository.VodRepository
+import com.tvbox.core.source.ApiSubscriptionParser
 import com.tvbox.core.source.DefaultSourceManager
+import com.tvbox.core.source.DefaultSpiderLoader
+import com.tvbox.core.source.LiveSourceManager
 import com.tvbox.core.source.SourceManager
+import com.tvbox.core.source.SpiderLoader
 import com.tvbox.core.storage.Database
 import com.tvbox.core.storage.InMemoryDatabase
 import com.tvbox.deviceapi.DeviceApi
@@ -17,6 +23,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.runBlocking
 
 /**
  * 全局依赖注入容器
@@ -43,6 +50,12 @@ object ServiceLocator {
     private var configManager: ConfigManager? = null
 
     private var sourceManager: SourceManager? = null
+
+    private var liveSourceManager: LiveSourceManager? = null
+
+    private var apiSubscriptionParser: ApiSubscriptionParser? = null
+
+    private var spiderLoader: SpiderLoader? = null
 
     private var vodRepository: VodRepository? = null
 
@@ -76,11 +89,53 @@ object ServiceLocator {
         favoriteManager = FavoriteManager(db.getFavoriteDao())
         configManager = ConfigManager(deviceApi.getStorageManager())
         sourceManager = DefaultSourceManager()
+        liveSourceManager = LiveSourceManager()
+        apiSubscriptionParser = ApiSubscriptionParser()
+        spiderLoader = DefaultSpiderLoader()
+
+        runBlocking {
+            val config = configManager!!.getConfig()
+            // 点播源：保证单选一致性（仅 currentVodKey 对应 enabled=true）
+            val currKey = config.currentVodKey.ifBlank {
+                config.vodSources.firstOrNull { it.enabled }?.key ?: config.vodSources.firstOrNull()?.key ?: ""
+            }
+            val normalizedVod = config.vodSources.map { src ->
+                src.copy(enabled = (src.key == currKey))
+            }
+            sourceManager!!.syncFromUserSources(normalizedVod)
+            // 同步直播源地址
+            val liveCurr = config.liveSources.firstOrNull { it.key == config.currentLiveKey }
+                ?: config.liveSources.firstOrNull { it.enabled }
+                ?: config.liveSources.firstOrNull()
+            if (liveCurr != null && liveCurr.url.isNotBlank()) {
+                liveSourceManager!!.setSubscriptionUrl(liveCurr.url)
+            }
+            if (sourceManager!!.getSources().isEmpty()) {
+                // 没有可用 JSON 源时，添加默认 MacCMS JSON API
+                val defaultApi = "https://www.mdzyapi.com/api.php/provide/vod/"
+                val defaultKey = "mdzy_json"
+                val defaultName = "魔都资源"
+                sourceManager!!.addSource(
+                    MovieSource(
+                        key = defaultKey, name = defaultName, api = defaultApi,
+                        type = 1, enabled = true, searchable = true, playerUrl = ""
+                    )
+                )
+                val defaultSource = UserVodSource(
+                    key = defaultKey, name = defaultName, api = defaultApi, enabled = true
+                )
+                configManager!!.update { c ->
+                    c.copy(vodSources = listOf(defaultSource), currentVodKey = defaultKey)
+                }
+            }
+        }
+
         vodRepository = DefaultVodRepository(
             sourceManager = sourceManager!!,
             client = TvboxSourceClient(
                 networkService = _networkService,
-                sourceManager = sourceManager!!
+                sourceManager = sourceManager!!,
+                spiderLoader = spiderLoader!!
             )
         )
     }
@@ -99,7 +154,38 @@ object ServiceLocator {
 
     fun getSourceManager(): SourceManager = sourceManager ?: notInitialized()
 
+    fun getLiveSourceManager(): LiveSourceManager = liveSourceManager ?: notInitialized()
+
+    fun getApiSubscriptionParser(): ApiSubscriptionParser = apiSubscriptionParser ?: notInitialized()
+
+    fun getSpiderLoader(): SpiderLoader = spiderLoader ?: notInitialized()
+
     fun getVodRepository(): VodRepository = vodRepository ?: notInitialized()
+
+    /**
+     * 设置平台专属 SpiderLoader
+     *
+     * 供各平台（如 Android 的 AndroidSpiderLoader）在 ServiceLocator.initialize 之后
+     * 注入真实的 Spider 加载器，替换默认的 DefaultSpiderLoader 空实现。
+     *
+     * 调用后会使用新的 SpiderLoader 重建 VodRepository，确保后续请求使用真实加载器。
+     *
+     * @param loader 平台 SpiderLoader 实例
+     */
+    fun setSpiderLoader(loader: SpiderLoader) {
+        spiderLoader = loader
+        // 使用新的 SpiderLoader 重建 VodRepository
+        vodRepository = DefaultVodRepository(
+            sourceManager = sourceManager ?: run {
+                return
+            },
+            client = TvboxSourceClient(
+                networkService = _networkService,
+                sourceManager = sourceManager!!,
+                spiderLoader = loader
+            )
+        )
+    }
 
     /**
      * 构建配置好的 Ktor HTTP 客户端

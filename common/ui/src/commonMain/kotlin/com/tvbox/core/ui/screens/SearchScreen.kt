@@ -38,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,12 +71,18 @@ fun SearchScreen(
     modifier: Modifier = Modifier
 ) {
     val tokens = tvTokens()
+    val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
-    val recentSearch = remember { mutableStateListOf("长安忆", "剑与魔法之书", "暗夜法官") }
+    val recentSearch = remember { mutableStateListOf<String>() }
     val hotKeywords = MockData.hotKeywords
     val categories = MockData.categories
     var selectedCategories by remember { mutableStateOf(emptyList<String>()) }
     val showResults = query.isNotEmpty()
+
+    LaunchedEffect(Unit) {
+        val hist = runCatching { ServiceLocator.getConfigManager().getConfig().searchHistory }.getOrDefault(emptyList())
+        if (hist.isNotEmpty()) { recentSearch.clear(); recentSearch.addAll(hist) }
+    }
 
     // 真实搜索状态
     var searching by remember { mutableStateOf(false) }
@@ -88,6 +95,16 @@ fun SearchScreen(
             .debounce(400)
             .filter { it.isNotBlank() }
             .collect { kw ->
+                // 记录搜索历史（不重复，最多20条）
+                if (kw.isNotBlank()) {
+                    val updated = (listOf(kw) + recentSearch.filterNot { it.equals(kw, ignoreCase = true) }).take(20)
+                    if (updated != recentSearch) {
+                        recentSearch.clear(); recentSearch.addAll(updated)
+                        runCatching {
+                            ServiceLocator.getConfigManager().update { it.copy(searchHistory = recentSearch) }
+                        }
+                    }
+                }
                 searching = true
                 realResults.clear()
                 val repo = runCatching { ServiceLocator.getVodRepository() }.getOrNull()

@@ -55,6 +55,8 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.tvbox.core.ui.icons.TVBoxIcons
 import com.tvbox.core.ui.theme.tvTokens
+import com.tvbox.core.model.LiveCategory
+import com.tvbox.core.model.VodInfo
 
 /**
  * 底部导航 Tab 项
@@ -66,8 +68,8 @@ enum class BottomTab(
     val filledIcon: ImageVector
 ) {
     HOME("home", "首页", TVBoxIcons.Outlined.Home, TVBoxIcons.Filled.Home),
+    LIVE("live", "直播", TVBoxIcons.Outlined.LiveTv, TVBoxIcons.Filled.LiveTv),
     SEARCH("search", "搜索", TVBoxIcons.Outlined.Search, TVBoxIcons.Filled.Search),
-    SOURCES("sources", "源管理", TVBoxIcons.Outlined.Source, TVBoxIcons.Filled.Source),
     FAVORITES("favorites", "收藏", TVBoxIcons.Outlined.Favorite, TVBoxIcons.Filled.Favorite),
     SETTINGS("settings", "设置", TVBoxIcons.Outlined.Settings, TVBoxIcons.Filled.Settings);
 
@@ -240,13 +242,17 @@ fun AppScaffold(
             contentColor = MaterialTheme.colorScheme.onBackground,
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
-                Surface(tonalElevation = tokens.elevation.sm) {
+                Surface(
+                    tonalElevation = tokens.elevation.sm,
+                    modifier = Modifier.statusBarsPadding()
+                ) {
                     if (topBarBehavior != null) {
                         CenterAlignedTopAppBar(
                             title = title,
                             navigationIcon = navigationIcon,
                             actions = { actions() },
                             scrollBehavior = topBarBehavior,
+                            windowInsets = WindowInsets(0, 0, 0, 0),
                             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                                 containerColor = Color.Transparent,
                                 titleContentColor = MaterialTheme.colorScheme.onSurface,
@@ -259,6 +265,7 @@ fun AppScaffold(
                             title = title,
                             navigationIcon = navigationIcon,
                             actions = { actions() },
+                            windowInsets = WindowInsets(0, 0, 0, 0),
                             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                                 containerColor = Color.Transparent,
                                 titleContentColor = MaterialTheme.colorScheme.onSurface,
@@ -274,9 +281,11 @@ fun AppScaffold(
                     NavigationBar(
                         containerColor = Color.Transparent,
                         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        tonalElevation = 0.dp
+                        tonalElevation = 0.dp,
+                        windowInsets = WindowInsets(0, 0, 0, 0)
                     ) {
-                        BottomTab.entries.forEach { tab ->
+                        val bottomTabs = listOf(BottomTab.HOME, BottomTab.LIVE, BottomTab.SETTINGS)
+                        bottomTabs.forEach { tab ->
                             val selected = currentTab == tab
                             NavigationBarItem(
                                 selected = selected,
@@ -300,7 +309,6 @@ fun AppScaffold(
                 }
             }
         ) { scaffoldPadding ->
-            // 合并 Scaffold 内边距与系统导航栏边距
             val merged = PaddingValues(
                 start = scaffoldPadding.calculateStartPadding(LayoutDirection.Ltr),
                 end = scaffoldPadding.calculateEndPadding(LayoutDirection.Ltr),
@@ -310,7 +318,7 @@ fun AppScaffold(
             )
             androidx.compose.animation.AnimatedVisibility(
                 visible = true,
-                modifier = Modifier.fillMaxSize().padding(merged)
+                modifier = Modifier.fillMaxSize()
             ) {
                 content(merged)
             }
@@ -323,38 +331,79 @@ fun AppScaffold(
  */
 class AppNavState {
     var currentTab by mutableStateOf(BottomTab.HOME)
-    var detailVodId: String? by mutableStateOf(null)
-    var detailSourceKey: String? by mutableStateOf(null)
+    // 详情页：直接保存完整 VodInfo，避免二次拉取失败后丢失基础信息
+    var detailVodInfo: VodInfo? by mutableStateOf(null)
     var playerVodId: String? by mutableStateOf(null)
     var playerSourceKey: String? by mutableStateOf(null)
     var playerEpisodeId: String? by mutableStateOf(null)
 
-    fun navigateToDetail(vodId: String, sourceKey: String) {
-        detailVodId = vodId
-        detailSourceKey = sourceKey
+    // 直接URL播放：绕过影视详情直接跳转播放器
+    var playerDirectUrl: String? by mutableStateOf(null)
+
+    // 直播播放器路由
+    var liveCategories: List<LiveCategory>? by mutableStateOf(null)
+    var liveCategoryIndex: Int by mutableStateOf(0)
+    var liveChannelIndex: Int by mutableStateOf(0)
+
+    // 收藏页 / 历史页（二级面板）
+    var showFavorites by mutableStateOf(false)
+    var showHistory by mutableStateOf(false)
+
+    fun navigateToDetail(vodInfo: VodInfo) {
+        detailVodInfo = vodInfo
     }
 
     fun navigateToPlayer(vodId: String, sourceKey: String, episodeId: String) {
         playerVodId = vodId
         playerSourceKey = sourceKey
         playerEpisodeId = episodeId
+        playerDirectUrl = null
+    }
+
+    /**
+     * 通过直接URL播放（用户手动输入链接）
+     */
+    fun navigateToDirectPlayer(url: String) {
+        playerVodId = "__direct_url__"
+        playerSourceKey = ""
+        playerEpisodeId = "__direct_ep__"
+        playerDirectUrl = url
+    }
+
+    fun navigateToLivePlayer(
+        categories: List<LiveCategory>,
+        categoryIndex: Int,
+        channelIndex: Int
+    ) {
+        liveCategories = categories
+        liveCategoryIndex = categoryIndex
+        liveChannelIndex = channelIndex
     }
 
     fun navigateToTab(tab: BottomTab) {
         currentTab = tab
         // 切Tab时清二级路由
-        detailVodId = null
-        detailSourceKey = null
+        detailVodInfo = null
         playerVodId = null
         playerSourceKey = null
         playerEpisodeId = null
+        playerDirectUrl = null
+        liveCategories = null
+        showFavorites = false
+        showHistory = false
     }
 
-    fun backFromDetail() { detailVodId = null; detailSourceKey = null }
-    fun backFromPlayer() { playerVodId = null; playerSourceKey = null; playerEpisodeId = null }
+    fun backFromDetail() { detailVodInfo = null }
+    fun backFromPlayer() { playerVodId = null; playerSourceKey = null; playerEpisodeId = null; playerDirectUrl = null }
+    fun backFromLivePlayer() { liveCategories = null }
+    fun backFromFavorites() { showFavorites = false }
+    fun backFromHistory() { showHistory = false }
 
-    val showDetail: Boolean get() = detailVodId != null && playerVodId == null
+    val showDetail: Boolean get() = detailVodInfo != null && playerVodId == null && liveCategories == null && !showFavorites && !showHistory
     val showPlayer: Boolean get() = playerVodId != null
+    val showLivePlayer: Boolean get() = liveCategories != null
+    val showFavoritesScreen: Boolean get() = showFavorites && playerVodId == null && liveCategories == null && detailVodInfo == null
+    val showHistoryScreen: Boolean get() = showHistory && playerVodId == null && liveCategories == null && detailVodInfo == null && !showFavorites
 }
 
 @Composable

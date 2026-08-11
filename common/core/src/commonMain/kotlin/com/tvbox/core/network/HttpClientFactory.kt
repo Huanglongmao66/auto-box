@@ -41,8 +41,9 @@ class HttpClientFactory(
             install(UserAgent) {
                 agent = USER_AGENT
             }
+            followRedirects = true
+            expectSuccess = false
             if (proxyConfig != null && proxyConfig.enabled) {
-                // 代理配置由各平台引擎实现
             }
         }
     }
@@ -128,11 +129,15 @@ class NetworkService(private val httpClient: HttpClient) {
      * 下载文件（返回字节数组）
      */
     suspend fun download(url: String, headers: Map<String, String> = emptyMap()): ByteArray {
-        return httpClient.get(url) {
+        val response = httpClient.get(url) {
             headers.forEach { (key, value) ->
                 header(key, value)
             }
-        }.readBytes()
+        }
+        if (!response.status.isSuccess()) {
+            throw Exception("HTTP ${response.status.value}: ${response.status.description}")
+        }
+        return response.readBytes()
     }
 
     /**

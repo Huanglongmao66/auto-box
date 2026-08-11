@@ -6,6 +6,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -15,6 +16,7 @@ import android.widget.Toast
 import com.tvbox.deviceapi.DeviceApi
 import com.tvbox.deviceapi.LogLevel
 import com.tvbox.deviceapi.Platform
+import com.tvbox.deviceapi.ScreenOrientation
 import com.tvbox.deviceapi.player.IPlayer
 import com.tvbox.deviceapi.storage.StorageManager
 import java.io.File
@@ -199,6 +201,49 @@ class AndroidDeviceApi(
             (context as? Activity)?.finishAndRemoveTask()
         }
         System.exit(0)
+    }
+
+    // ===== 屏幕方向 =====
+
+    /** 当前是否已锁定屏幕方向（锁定后 setScreenOrientation 的自动调用将被忽略） */
+    @Volatile
+    private var orientationLocked: Boolean = false
+
+    override fun setScreenOrientation(orientation: ScreenOrientation) {
+        // 锁定时忽略自动切换调用
+        if (orientationLocked) return
+        val activity = context as? Activity ?: return
+        val requested = when (orientation) {
+            ScreenOrientation.UNSPECIFIED -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            ScreenOrientation.PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            ScreenOrientation.LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            ScreenOrientation.SENSOR -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            ScreenOrientation.FULL_SENSOR -> ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+        }
+        activity.runOnUiThread { activity.requestedOrientation = requested }
+    }
+
+    override fun getScreenOrientation(): ScreenOrientation {
+        val activity = context as? Activity ?: return ScreenOrientation.UNSPECIFIED
+        return when (activity.requestedOrientation) {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
+            ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT -> ScreenOrientation.PORTRAIT
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
+            ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE,
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE -> ScreenOrientation.LANDSCAPE
+            ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR -> ScreenOrientation.FULL_SENSOR
+            else -> ScreenOrientation.UNSPECIFIED
+        }
+    }
+
+    override fun isOrientationLocked(): Boolean = orientationLocked
+
+    override fun setOrientationLocked(locked: Boolean) {
+        orientationLocked = locked
+        // 解锁后恢复为跟随重力
+        if (!locked) {
+            setScreenOrientation(ScreenOrientation.FULL_SENSOR)
+        }
     }
 
     // ===== 日志 =====

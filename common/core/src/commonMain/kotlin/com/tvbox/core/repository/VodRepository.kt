@@ -97,6 +97,8 @@ interface VodRepository {
  * 首页聚合结果
  */
 data class HomeContent(
+    /** Logo 图片地址 */
+    val logo: String = "",
     /** Banner 轮播 */
     val banners: List<VodInfo> = emptyList(),
     /** 所有分类 */

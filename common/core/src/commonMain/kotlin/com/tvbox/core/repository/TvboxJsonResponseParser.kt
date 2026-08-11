@@ -39,6 +39,9 @@ internal object TvboxJsonResponseParser {
         var pageCount = 1
         var limit = 20
         var total = 0
+        var logo = ""
+
+        root.safeString("logo")?.let { logo = it }
 
         // 分页信息
         root.safeInt("page")?.let { page = it }
@@ -89,6 +92,7 @@ internal object TvboxJsonResponseParser {
         }
 
         return ParseListResult(
+            logo = logo,
             list = list.toList(),
             categories = categories.toList(),
             filters = filters.toList(),
@@ -100,6 +104,7 @@ internal object TvboxJsonResponseParser {
     }
 
     data class ParseListResult(
+        val logo: String = "",
         val list: List<VodInfo>,
         val categories: List<VodClass>,
         val filters: List<VodFilter>,
@@ -109,7 +114,7 @@ internal object TvboxJsonResponseParser {
         val total: Int
     ) {
         companion object {
-            val EMPTY = ParseListResult(emptyList(), emptyList(), emptyList(), 1, 1, 20, 0)
+            val EMPTY = ParseListResult("", emptyList(), emptyList(), emptyList(), 1, 1, 20, 0)
         }
     }
 

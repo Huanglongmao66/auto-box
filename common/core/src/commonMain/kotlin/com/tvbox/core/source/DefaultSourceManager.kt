@@ -1,6 +1,7 @@
 package com.tvbox.core.source
 
 import com.tvbox.core.model.MovieSource
+import com.tvbox.core.model.UserVodSource
 import com.tvbox.utils.JsonUtils
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -77,6 +78,36 @@ class DefaultSourceManager : SourceManager {
         }
 
         return emptyList()
+    }
+
+    override fun syncFromUserSources(userVodSources: List<UserVodSource>) {
+        sources.clear()
+        userVodSources.forEach { userSource ->
+            // 保留所有源（含 CSP/JS/Spider），完整映射 TVBoxOS 字段
+            // - type=0: XML 源
+            // - type=1: JSON 源（MacCMS 标准接口）
+            // - type=3: Spider/CSP 源（Jar/JS/Py 爬虫）
+            // - type=4: 新协议（带 ext 过滤参数的 JSON 源）
+            val movieSource = MovieSource(
+                key = userSource.key,
+                name = userSource.name,
+                api = userSource.api,
+                enabled = userSource.enabled,
+                type = userSource.type,
+                searchable = userSource.searchable != 0,
+                quickSearchable = userSource.quickSearch != 0,
+                filterable = userSource.filterable != 0,
+                playerUrl = userSource.playerUrl,
+                playerType = userSource.playerType,
+                timeout = if (userSource.timeout > 0) userSource.timeout * 1000 else 15000,
+                ext = userSource.ext,
+                jar = userSource.jar,
+                clickSelector = userSource.clickSelector,
+                style = userSource.style,
+                categoryList = userSource.categories
+            )
+            upsert(movieSource)
+        }
     }
 
     /**

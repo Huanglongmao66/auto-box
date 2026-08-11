@@ -28,6 +28,94 @@ import androidx.compose.foundation.shape.CircleShape
  */
 @Immutable
 object TVBoxColorScheme {
+    // ===== 主题预设（6 款） =====
+    data class ThemeSeed(
+        val name: String,
+        val primaryLight: Color,
+        val primaryContainerLight: Color,
+        val onPrimaryContainerLight: Color,
+        val secondaryLight: Color,
+        val primaryDark: Color,
+        val primaryContainerDark: Color,
+        val onPrimaryContainerDark: Color,
+        val secondaryDark: Color,
+    )
+
+    val themePresets: List<ThemeSeed> = listOf(
+        // 0 - 靛紫
+        ThemeSeed(
+            name = "靛紫",
+            primaryLight = Color(0xFF4F46E5),
+            primaryContainerLight = Color(0xFFE0E7FF),
+            onPrimaryContainerLight = Color(0xFF1E1B4B),
+            secondaryLight = Color(0xFF0EA5E9),
+            primaryDark = Color(0xFF818CF8),
+            primaryContainerDark = Color(0xFF3730A3),
+            onPrimaryContainerDark = Color(0xFFC7D2FE),
+            secondaryDark = Color(0xFF38BDF8)
+        ),
+        // 1 - 湖蓝
+        ThemeSeed(
+            name = "湖蓝",
+            primaryLight = Color(0xFF0284C7),
+            primaryContainerLight = Color(0xFFBAE6FD),
+            onPrimaryContainerLight = Color(0xFF0C4A6E),
+            secondaryLight = Color(0xFF06B6D4),
+            primaryDark = Color(0xFF38BDF8),
+            primaryContainerDark = Color(0xFF0369A1),
+            onPrimaryContainerDark = Color(0xFFE0F2FE),
+            secondaryDark = Color(0xFF22D3EE)
+        ),
+        // 2 - 樱粉
+        ThemeSeed(
+            name = "樱粉",
+            primaryLight = Color(0xFFDB2777),
+            primaryContainerLight = Color(0xFFFBCFE8),
+            onPrimaryContainerLight = Color(0xFF831843),
+            secondaryLight = Color(0xFFF472B6),
+            primaryDark = Color(0xFFF472B6),
+            primaryContainerDark = Color(0xFFBE185D),
+            onPrimaryContainerDark = Color(0xFFFCE7F3),
+            secondaryDark = Color(0xFFF9A8D4)
+        ),
+        // 3 - 森绿
+        ThemeSeed(
+            name = "森绿",
+            primaryLight = Color(0xFF059669),
+            primaryContainerLight = Color(0xFFA7F3D0),
+            onPrimaryContainerLight = Color(0xFF064E3B),
+            secondaryLight = Color(0xFF10B981),
+            primaryDark = Color(0xFF34D399),
+            primaryContainerDark = Color(0xFF047857),
+            onPrimaryContainerDark = Color(0xFFD1FAE5),
+            secondaryDark = Color(0xFF6EE7B7)
+        ),
+        // 4 - 暖橙
+        ThemeSeed(
+            name = "暖橙",
+            primaryLight = Color(0xFFEA580C),
+            primaryContainerLight = Color(0xFFFED7AA),
+            onPrimaryContainerLight = Color(0xFF7C2D12),
+            secondaryLight = Color(0xFFF59E0B),
+            primaryDark = Color(0xFFFB923C),
+            primaryContainerDark = Color(0xFFC2410C),
+            onPrimaryContainerDark = Color(0xFFEDD5BB),
+            secondaryDark = Color(0xFFFBBF24)
+        ),
+        // 5 - 朱砂
+        ThemeSeed(
+            name = "朱砂",
+            primaryLight = Color(0xFFDC2626),
+            primaryContainerLight = Color(0xFFFECACA),
+            onPrimaryContainerLight = Color(0xFF7F1D1D),
+            secondaryLight = Color(0xFFEF4444),
+            primaryDark = Color(0xFFF87171),
+            primaryContainerDark = Color(0xFFB91C1C),
+            onPrimaryContainerDark = Color(0xFFFEE2E2),
+            secondaryDark = Color(0xFFFCA5A5)
+        )
+    )
+
     // ===== 品牌主色（沉稳影视深色主题） =====
     val Brand = Color(0xFF6366F1)          // 靛紫主色，强调选中/高亮
     val BrandDim = Color(0xFF818CF8)
@@ -123,6 +211,57 @@ object TVBoxColorScheme {
         onError = OnErrorDark,
         scrim = ScrimDark
     )
+
+    /** 根据主题种子索引构建浅色配色 */
+    fun lightSchemeFor(seedIndex: Int): ColorScheme {
+        val seed = themePresets.getOrNull(seedIndex.coerceIn(0, themePresets.size - 1)) ?: themePresets[0]
+        return lightColorScheme(
+            primary = seed.primaryLight,
+            onPrimary = Color.White,
+            primaryContainer = seed.primaryContainerLight,
+            onPrimaryContainer = seed.onPrimaryContainerLight,
+            secondary = seed.secondaryLight,
+            onSecondary = Color.White,
+            tertiary = TertiaryLight,
+            background = BackgroundLight,
+            onBackground = OnBackgroundLight,
+            surface = SurfaceLight,
+            onSurface = OnSurfaceLight,
+            surfaceVariant = SurfaceVariantLight,
+            onSurfaceVariant = OnSurfaceVariantLight,
+            surfaceContainerHighest = SurfaceContainerHighestLight,
+            outline = OutlineLight,
+            outlineVariant = OutlineVariantLight,
+            error = ErrorLight,
+            onError = OnErrorLight
+        )
+    }
+
+    /** 根据主题种子索引构建深色配色 */
+    fun darkSchemeFor(seedIndex: Int): ColorScheme {
+        val seed = themePresets.getOrNull(seedIndex.coerceIn(0, themePresets.size - 1)) ?: themePresets[0]
+        return darkColorScheme(
+            primary = seed.primaryDark,
+            onPrimary = seed.onPrimaryContainerDark,
+            primaryContainer = seed.primaryContainerDark,
+            onPrimaryContainer = seed.onPrimaryContainerDark,
+            secondary = seed.secondaryDark,
+            onSecondary = Color(0xFF082F49),
+            tertiary = TertiaryDark,
+            background = BackgroundDark,
+            onBackground = OnBackgroundDark,
+            surface = SurfaceDark,
+            onSurface = OnSurfaceDark,
+            surfaceVariant = SurfaceVariantDark,
+            onSurfaceVariant = OnSurfaceVariantDark,
+            surfaceContainerHighest = SurfaceContainerHighestDark,
+            outline = OutlineDark,
+            outlineVariant = OutlineVariantDark,
+            error = ErrorDark,
+            onError = OnErrorDark,
+            scrim = ScrimDark
+        )
+    }
 }
 
 /**
@@ -220,10 +359,12 @@ object TVBoxShapes {
 @Composable
 fun AppTheme(
     isDark: Boolean = true,
+    themeSeed: Int = 0,
     content: @Composable () -> Unit
 ) {
-    val actualDark = isDark // 影视APP默认深色风格
-    val colorScheme = if (actualDark) TVBoxColorScheme.darkScheme else TVBoxColorScheme.lightScheme
+    val actualDark = isDark
+    val seed = themeSeed.coerceIn(0, TVBoxColorScheme.themePresets.size - 1)
+    val colorScheme = if (actualDark) TVBoxColorScheme.darkSchemeFor(seed) else TVBoxColorScheme.lightSchemeFor(seed)
     CompositionLocalProvider(
         LocalTVBoxTokens provides TVBoxTokens(),
         LocalTVBoxIsDark provides actualDark,

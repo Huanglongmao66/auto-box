@@ -48,6 +48,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -290,16 +295,52 @@ fun PosterPlaceholder(
 fun VodCard(
     vodInfo: VodInfo,
     onClick: (VodInfo) -> Unit = {},
+    showScoreBadge: Boolean = true,
+    cardStyle: Int = 0,
     modifier: Modifier = Modifier
 ) {
     val tokens = tvTokens()
+    val (titleStyle, subStyle, spacing) = when (cardStyle) {
+        1 -> Triple(
+            MaterialTheme.typography.bodyMedium,
+            MaterialTheme.typography.labelSmall,
+            tokens.spacing.xs
+        )
+        2 -> Triple(
+            MaterialTheme.typography.titleMedium,
+            MaterialTheme.typography.bodySmall,
+            tokens.spacing.sm
+        )
+        else -> Triple(
+            MaterialTheme.typography.titleSmall,
+            MaterialTheme.typography.labelSmall,
+            tokens.spacing.sm
+        )
+    }
     Column(
         modifier = modifier
-            .clip(MaterialTheme.shapes.medium)
             .clickable { onClick(vodInfo) }
     ) {
-        Box {
+        Box(
+            modifier = Modifier
+                .clip(MaterialTheme.shapes.medium)
+                .fillMaxWidth()
+                .aspectRatio(0.72f)
+        ) {
             PosterPlaceholder(title = vodInfo.vodName)
+            val context = LocalPlatformContext.current
+            val model = remember(vodInfo.vodPic) {
+                ImageRequest.Builder(context)
+                    .data(vodInfo.vodPic.ifBlank { null })
+                    .crossfade(true)
+                    .build()
+            }
+            AsyncImage(
+                model = model,
+                contentDescription = vodInfo.vodName,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+            )
             if (vodInfo.vodRemarks.isNotEmpty()) {
                 Badge(
                     text = vodInfo.vodRemarks,
@@ -309,7 +350,7 @@ fun VodCard(
                     color = MaterialTheme.colorScheme.tertiary
                 )
             }
-            if (vodInfo.vodScore.isNotEmpty()) {
+            if (showScoreBadge && vodInfo.vodScore.isNotEmpty()) {
                 ScoreBadge(
                     score = vodInfo.vodScore,
                     modifier = Modifier
@@ -318,15 +359,15 @@ fun VodCard(
                 )
             }
         }
-        Spacer(modifier = Modifier.height(tokens.spacing.sm))
+        Spacer(modifier = Modifier.height(spacing))
         Text(
             text = vodInfo.vodName,
-            style = MaterialTheme.typography.titleSmall,
+            style = titleStyle,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        if (vodInfo.vodYear.isNotEmpty() || vodInfo.vodClass.isNotEmpty()) {
+        if (cardStyle != 1 && (vodInfo.vodYear.isNotEmpty() || vodInfo.vodClass.isNotEmpty())) {
             Spacer(modifier = Modifier.height(2.dp))
             val sub = buildString {
                 if (vodInfo.vodYear.isNotEmpty()) append(vodInfo.vodYear)
@@ -336,7 +377,7 @@ fun VodCard(
             if (sub.isNotEmpty()) {
                 Text(
                     text = sub,
-                    style = MaterialTheme.typography.labelSmall,
+                    style = subStyle,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -348,26 +389,104 @@ fun VodCard(
 
 // ============== 影视网格 ==============
 
+/**
+ * 影视网格。
+ *
+ * - [scrollEnabled]=true：使用 [LazyVerticalGrid]，要求调用方通过 [modifier] 提供确定的高度约束
+ *   （例如置于 `fillMaxSize()` 容器内或配合 `weight` 使用）。
+ * - [scrollEnabled]=false：适用于外层已有垂直滚动（`Column(verticalScroll)`）的场景。
+ *   此时退化为 **非惰性** 的 Row+Column 组合，避免 LazyGrid 在无限高度约束下抛出异常。
+ *   适用于「为你推荐」等条目数量有限的网格。
+ */
 @Composable
 fun VodGrid(
     items: List<VodInfo>,
     columns: Int = 3,
     onClick: (VodInfo) -> Unit = {},
     contentPadding: PaddingValues = PaddingValues(0.dp),
+    showScoreBadge: Boolean = true,
+    cardStyle: Int = 0,
     modifier: Modifier = Modifier,
-    scrollEnabled: Boolean = true
+    scrollEnabled: Boolean = true,
+    showLoadMore: Boolean = false,
+    onLoadMore: () -> Unit = {},
+    gridState: androidx.compose.foundation.lazy.grid.LazyGridState? = null
 ) {
     val tokens = tvTokens()
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(columns),
-        modifier = if (scrollEnabled) modifier.fillMaxSize() else modifier.fillMaxWidth().wrapContentHeight(),
-        contentPadding = contentPadding,
-        horizontalArrangement = Arrangement.spacedBy(tokens.spacing.md),
-        verticalArrangement = Arrangement.spacedBy(tokens.spacing.lg),
-        userScrollEnabled = scrollEnabled
-    ) {
-        items(items, key = { it.vodId + it.sourceKey }) { vodInfo ->
-            VodCard(vodInfo = vodInfo, onClick = onClick)
+    if (scrollEnabled) {
+        val state = gridState ?: remember { androidx.compose.foundation.lazy.grid.LazyGridState() }
+        LaunchedEffect(state.layoutInfo, showLoadMore) {
+            if (!showLoadMore) return@LaunchedEffect
+            val lastVisible = state.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            val total = state.layoutInfo.totalItemsCount
+            if (total > 0 && lastVisible >= total - 3) {
+                onLoadMore()
+            }
+        }
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(columns),
+            state = state,
+            modifier = modifier.fillMaxSize(),
+            contentPadding = contentPadding,
+            horizontalArrangement = Arrangement.spacedBy(tokens.spacing.md),
+            verticalArrangement = Arrangement.spacedBy(tokens.spacing.lg),
+            userScrollEnabled = true
+        ) {
+            items(items, key = { it.vodId + it.sourceKey }) { vodInfo ->
+                VodCard(vodInfo = vodInfo, onClick = onClick, showScoreBadge = showScoreBadge, cardStyle = cardStyle)
+            }
+            if (showLoadMore) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = tokens.spacing.md),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(tokens.spacing.sm))
+                            Text(
+                                "加载中...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        // 非惰性实现：外层已经是 verticalScroll，直接用 Row/Column 渲染，避免 LazyGrid 无限高度崩溃
+        val padLeft = contentPadding.calculateLeftPadding(LayoutDirection.Ltr)
+        val padRight = contentPadding.calculateRightPadding(LayoutDirection.Ltr)
+        val padTop = contentPadding.calculateTopPadding()
+        val padBottom = contentPadding.calculateBottomPadding()
+        Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(start = padLeft, end = padRight, top = padTop, bottom = padBottom),
+            verticalArrangement = Arrangement.spacedBy(tokens.spacing.lg)
+        ) {
+            items.chunked(columns).forEach { rowItems ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(tokens.spacing.md)
+                ) {
+                    rowItems.forEach { vodInfo ->
+                        Box(modifier = Modifier.weight(1f)) {
+                            VodCard(vodInfo = vodInfo, onClick = onClick, showScoreBadge = showScoreBadge, cardStyle = cardStyle)
+                        }
+                    }
+                    // 如果最后一行不足 columns 个，用空白占位保持宽度
+                    repeat(columns - rowItems.size) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
         }
     }
 }

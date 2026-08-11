@@ -1,6 +1,7 @@
 package com.tvbox.core.source
 
 import com.tvbox.core.model.MovieSource
+import com.tvbox.core.model.UserVodSource
 
 /**
  * 数据源管理器接口
@@ -70,4 +71,11 @@ interface SourceManager {
      * @return 导入成功的影视源列表
      */
     suspend fun importSubscriptionAsync(url: String, fetcher: suspend (String) -> String): List<MovieSource>
+
+    /**
+     * 从用户自定义影视源列表同步
+     * 清空现有源后将 UserVodSource 转换为 MovieSource 并全部插入
+     * @param userVodSources 用户自定义影视源列表
+     */
+    fun syncFromUserSources(userVodSources: List<UserVodSource>)
 }

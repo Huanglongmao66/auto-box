@@ -58,6 +58,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -80,6 +81,7 @@ import com.tvbox.core.model.VodEpisode
 import com.tvbox.core.model.VodInfo
 import com.tvbox.core.ui.components.Badge
 import com.tvbox.core.ui.components.EmptyView
+import com.tvbox.core.ui.components.PlatformVideoSurface
 import com.tvbox.core.ui.components.PosterPlaceholder
 import com.tvbox.core.ui.components.ScoreBadge
 import com.tvbox.core.ui.components.SectionHeader
@@ -90,6 +92,11 @@ import com.tvbox.core.ui.components.VodGrid
 import com.tvbox.core.ui.icons.TVBoxIcons
 import com.tvbox.core.ui.mock.MockData
 import com.tvbox.core.ui.theme.tvTokens
+import com.tvbox.deviceapi.LogLevel
+import com.tvbox.deviceapi.ScreenOrientation
+import com.tvbox.deviceapi.player.IPlayer
+import com.tvbox.deviceapi.player.PlayerListener
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.min
 
@@ -166,29 +173,35 @@ fun DetailScreen(
                 bottom = tokens.spacing.xxl
             )
         ) {
-            // 顶部返回条（因为二级详情页没有 TopBar）
+            // 顶部返回条
             item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = tokens.spacing.md, vertical = tokens.spacing.sm),
-                    verticalAlignment = Alignment.CenterVertically
+                androidx.compose.material3.Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                    shadowElevation = 2.dp
                 ) {
-                    IconButton(onClick = onBack) {
-                        Icon(TVBoxIcons.Outlined.ArrowBack, contentDescription = "返回",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Spacer(modifier = Modifier.weight(1f))
-                    IconButton(onClick = {
-                        scope.launch {
-                            snackbarHostState.showSnackbar(
-                                message = "已复制分享链接：${vodInfo.vodName}",
-                                duration = SnackbarDuration.Short
-                            )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = tokens.spacing.sm, vertical = tokens.spacing.xs),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = onBack) {
+                            Icon(TVBoxIcons.Outlined.ArrowBack, contentDescription = "返回",
+                                tint = MaterialTheme.colorScheme.onSurface)
                         }
-                    }) {
-                        Icon(TVBoxIcons.Outlined.Share, null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(modifier = Modifier.weight(1f))
+                        IconButton(onClick = {
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    message = "已复制分享链接：${vodInfo.vodName}",
+                                    duration = SnackbarDuration.Short
+                                )
+                            }
+                        }) {
+                            Icon(TVBoxIcons.Outlined.Share, null,
+                                tint = MaterialTheme.colorScheme.onSurface)
+                        }
                     }
                 }
             }
@@ -207,16 +220,32 @@ fun DetailScreen(
         if (displayEpisodes.isNotEmpty()) {
             item {
                 Column(modifier = Modifier.padding(horizontal = tokens.spacing.lg)) {
-                    SectionHeader(title = "播放线路", action = {
-                        if (playLines.size > 1) {
-                            SegmentedTabs(
-                                tabs = playLines,
-                                selectedIndex = playLineIndex,
-                                onSelect = { playLineIndex = it; groupIndex = 0 },
-                                modifier = Modifier.width(400.dp)
-                            )
+                    SectionHeader(title = "播放线路")
+                    Spacer(modifier = Modifier.height(tokens.spacing.sm))
+                    if (playLines.size > 1) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(tokens.spacing.sm)
+                        ) {
+                            playLines.forEachIndexed { i, line ->
+                                val sel = i == playLineIndex
+                                FilterChip(
+                                    selected = sel,
+                                    onClick = { playLineIndex = i; groupIndex = 0 },
+                                    label = { Text(line, style = MaterialTheme.typography.labelLarge) },
+                                    shape = MaterialTheme.shapes.large
+                                )
+                            }
                         }
-                    })
+                    } else {
+                        Text(
+                            text = playLines.firstOrNull() ?: "默认线路",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
             // 选集：分组 Tab + 网格
@@ -485,6 +514,8 @@ private fun DetailHero(
 }
 
 // ================= 选集网格 =================
+// 注意：外层为 Column(verticalScroll)，这里使用 Row+Column 非惰性实现，
+// 避免 LazyVerticalGrid 在无限高度约束下抛出 IllegalStateException。
 
 @Composable
 private fun EpisodeGrid(
@@ -500,24 +531,33 @@ private fun EpisodeGrid(
             maxWidth >= 560.dp -> 6
             else -> 4
         }
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(cols),
-            modifier = Modifier.fillMaxWidth().wrapContentHeight(),
-            contentPadding = PaddingValues(0.dp),
-            horizontalArrangement = Arrangement.spacedBy(tokens.spacing.sm),
-            verticalArrangement = Arrangement.spacedBy(tokens.spacing.sm),
-            userScrollEnabled = false
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(tokens.spacing.sm)
         ) {
-            items(items, key = { it.episodeId }) { ep ->
-                val isSelected = ep.episodeId == selectedId
-                val isWatched = ep.episodeId.toIntOrNull() != null &&
-                        (ep.episodeId.substringAfter("ep").toIntOrNull() ?: 0) in 1..12
-                EpisodeCell(
-                    name = ep.name,
-                    selected = isSelected,
-                    watched = isWatched,
-                    onClick = { onClick(ep) }
-                )
+            items.chunked(cols).forEach { rowItems ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(tokens.spacing.sm)
+                ) {
+                    rowItems.forEach { ep ->
+                        val isSelected = ep.episodeId == selectedId
+                        val isWatched = ep.episodeId.toIntOrNull() != null &&
+                                (ep.episodeId.substringAfter("ep").toIntOrNull() ?: 0) in 1..12
+                        val dispName = ep.name.substringAfterLast(" · ").ifBlank { ep.name }
+                        Box(modifier = Modifier.weight(1f)) {
+                            EpisodeCell(
+                                name = dispName,
+                                selected = isSelected,
+                                watched = isWatched,
+                                onClick = { onClick(ep) }
+                            )
+                        }
+                    }
+                    repeat(cols - rowItems.size) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
             }
         }
     }
@@ -571,18 +611,76 @@ fun PlayerScreen(
     modifier: Modifier = Modifier
 ) {
     val tokens = tvTokens()
-    var isPlaying by remember { mutableStateOf(true) }
+    val deviceApi = remember { ServiceLocator.getDeviceApi() }
+
+    var isPlaying by remember { mutableStateOf(false) }
+    var isBuffering by remember { mutableStateOf(true) }
     var isFullscreen by remember { mutableStateOf(false) }
-    var position by remember { mutableIntStateOf(0) }
-    var duration by remember { mutableIntStateOf(60 * 60 * 1000) }
-    var volume by remember { mutableIntStateOf(70) }
+    var position by remember { mutableStateOf(0L) }
+    var duration by remember { mutableStateOf(0L) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
     var showControls by remember { mutableStateOf(true) }
-    var panel by remember { mutableStateOf("none") } // "none" / "episodes" / "tracks"
+    var panel by remember { mutableStateOf("none") } // "none" / "episodes" / "tracks" / "speed" / "more"
+    var videoWidth by remember { mutableIntStateOf(0) }
+    var videoHeight by remember { mutableIntStateOf(0) }
+    var speed by remember { mutableStateOf(1.0f) }
+    var isSeeking by remember { mutableStateOf(false) }
+    var seekPosition by remember { mutableStateOf(0f) }
 
     // 真实播放地址解析
     var resolving by remember { mutableStateOf(false) }
     var resolvedUrl by remember(episode.episodeId) { mutableStateOf(episode.url) }
     var resolveError by remember { mutableStateOf<String?>(null) }
+
+    // 创建播放器（仅一次）
+    val player: IPlayer = remember {
+        deviceApi.createPlayer().also { p ->
+            p.addListener(object : PlayerListener {
+                override fun onPlay() {
+                    isPlaying = true
+                    isBuffering = false
+                    errorMessage = null
+                    deviceApi.log(LogLevel.DEBUG, "PlayerScreen", "onPlay url=$resolvedUrl")
+                }
+                override fun onPause() { isPlaying = false }
+                override fun onBufferingStateChanged(buffering: Boolean) {
+                    isBuffering = buffering
+                    deviceApi.log(LogLevel.DEBUG, "PlayerScreen", "buffering=$buffering")
+                }
+                override fun onError(errorCode: Int, message: String) {
+                    errorMessage = "播放错误($errorCode)：$message"
+                    isBuffering = false
+                    isPlaying = false
+                    deviceApi.log(LogLevel.ERROR, "PlayerScreen", "onError code=$errorCode msg=$message url=$resolvedUrl")
+                }
+                override fun onVideoSizeChanged(width: Int, height: Int) {
+                    videoWidth = width
+                    videoHeight = height
+                    deviceApi.log(LogLevel.INFO, "PlayerScreen", "videoSize=${width}x${height}")
+                }
+                override fun onReady() {
+                    isBuffering = false
+                    deviceApi.log(LogLevel.INFO, "PlayerScreen", "onReady")
+                }
+                override fun onProgressChanged(positionMs: Long, durationMs: Long) {
+                    position = positionMs
+                    duration = durationMs
+                }
+                override fun onCompletion() {
+                    isPlaying = false
+                    deviceApi.log(LogLevel.INFO, "PlayerScreen", "onCompletion")
+                }
+            })
+        }
+    }
+
+    // 释放播放器
+    DisposableEffect(Unit) {
+        onDispose {
+            player.stop()
+            player.release()
+        }
+    }
 
     LaunchedEffect(episode.episodeId, vodInfo.sourceKey) {
         // 如果是直链，跳过
@@ -609,8 +707,63 @@ fun PlayerScreen(
         resolving = false
     }
 
-    val progressF = if (duration <= 0) 0f else (position.toFloat() / duration).coerceIn(0f, 1f)
-    val canPlay = resolvedUrl.isNotBlank()
+    // 播放地址解析完成后，自动开始播放
+    LaunchedEffect(resolvedUrl, resolving) {
+        if (resolving) return@LaunchedEffect
+        if (resolvedUrl.isBlank()) {
+            errorMessage = "播放地址为空"
+            return@LaunchedEffect
+        }
+        deviceApi.log(LogLevel.INFO, "PlayerScreen", "setDataSource: $resolvedUrl")
+        isBuffering = true
+        errorMessage = null
+        player.stop()
+        player.setDataSource(resolvedUrl, episode.header)
+        player.setSpeed(speed)
+        player.play()
+    }
+
+    // 上一集/下一集
+    val episodes = vodInfo.episodes.ifEmpty { listOf(episode) }
+    val currentEpisodeIndex = episodes.indexOfFirst { it.episodeId == episode.episodeId }.coerceAtLeast(0)
+    fun prevEpisode() {
+        if (currentEpisodeIndex > 0) {
+            onEpisodeChange(episodes[currentEpisodeIndex - 1])
+        }
+    }
+    fun nextEpisode() {
+        if (currentEpisodeIndex < episodes.size - 1) {
+            onEpisodeChange(episodes[currentEpisodeIndex + 1])
+        }
+    }
+
+    // 倍速切换
+    val speedOptions = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+    fun changeSpeed(s: Float) {
+        speed = s
+        player.setSpeed(s)
+        panel = "none"
+    }
+
+    // 全屏切换
+    fun toggleFullscreen() {
+        isFullscreen = !isFullscreen
+        if (isFullscreen) {
+            deviceApi.setScreenOrientation(ScreenOrientation.LANDSCAPE)
+        } else {
+            deviceApi.setScreenOrientation(ScreenOrientation.PORTRAIT)
+        }
+    }
+
+    // 控制层自动隐藏（5 秒后）
+    LaunchedEffect(showControls, isPlaying) {
+        if (showControls && isPlaying) {
+            delay(5000)
+            showControls = false
+        }
+    }
+
+    val progressF = if (duration <= 0L) 0f else (position.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
 
     Column(
         modifier = modifier
@@ -623,21 +776,40 @@ fun PlayerScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(16 / 9f)
-                .background(Brush.radialGradient(
-                    listOf(
-                        Color(0xFF1A1A2E),
-                        Color(0xFF0A0A0F),
-                        Color.Black
-                    )
-                ))
+                .background(Color.Black)
         ) {
-            // 中心图标（播放器占位）+ 真实播放地址
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                if (resolving) {
+            // 真实视频渲染
+            PlatformVideoSurface(player = player, modifier = Modifier.fillMaxSize())
+
+            // 缓冲中提示
+            if (isBuffering && !resolving) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = isBuffering,
+                    modifier = Modifier.align(Alignment.Center)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            color = Color.White,
+                            modifier = Modifier.size(56.dp),
+                            strokeWidth = 3.dp
+                        )
+                        Spacer(modifier = Modifier.height(tokens.spacing.sm))
+                        Text(
+                            text = "加载中…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
+
+            // 解析中提示
+            if (resolving) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
                     androidx.compose.material3.CircularProgressIndicator(
                         color = Color.White,
                         modifier = Modifier.size(72.dp),
@@ -654,74 +826,28 @@ fun PlayerScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.White.copy(alpha = 0.7f)
                     )
-                } else {
+                }
+            }
+
+            // 错误提示
+            if (errorMessage != null && !resolving) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
                     Icon(
-                        imageVector = TVBoxIcons.Outlined.PlayArrow,
+                        imageVector = TVBoxIcons.Outlined.Error,
                         contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.8f),
-                        modifier = Modifier.size(96.dp)
+                        tint = Color(0xFFFF5252),
+                        modifier = Modifier.size(72.dp)
                     )
                     Spacer(modifier = Modifier.height(tokens.spacing.md))
                     Text(
-                        text = vodInfo.vodName,
-                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
+                        text = errorMessage!!,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = Color.White
                     )
-                    Text(
-                        text = "正在播放：${episode.name}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.7f)
-                    )
-                    Spacer(modifier = Modifier.height(tokens.spacing.md))
-                    // 真实播放地址展示
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 24.dp)
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color.White.copy(alpha = 0.08f))
-                            .padding(tokens.spacing.md)
-                    ) {
-                        Column {
-                            val hintColor = Color.White.copy(alpha = 0.85f)
-                            Row {
-                                Badge(
-                                    text = if (resolveError != null) "解析降级"
-                                    else if (isDirectPlayUrl(resolvedUrl)) "直链"
-                                    else "已解析",
-                                    color = if (resolveError != null) Color(0xFFFFB74D) else MaterialTheme.colorScheme.primary
-                                )
-                                if (isPlaying) {
-                                    Spacer(Modifier.width(tokens.spacing.sm))
-                                    Badge(
-                                        text = "播放中",
-                                        color = Color(0xFF4CAF50)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(tokens.spacing.sm))
-                            Text(
-                                text = "播放地址：",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.6f)
-                            )
-                            Text(
-                                text = if (resolvedUrl.isBlank()) "(空)" else resolvedUrl,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = hintColor,
-                                maxLines = 4,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            if (resolveError != null) {
-                                Spacer(Modifier.height(tokens.spacing.xs))
-                                Text(
-                                    text = resolveError!!,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFFFFB74D)
-                                )
-                            }
-                        }
-                    }
                 }
             }
 
@@ -785,15 +911,39 @@ fun PlayerScreen(
                         .padding(tokens.spacing.lg)
                 ) {
                     Column {
-                        // 进度条
-                        PlayerProgressBar(progress = progressF)
+                        // 可拖动进度条
+                        PlayerProgressBar(
+                            progress = if (isSeeking) seekPosition else progressF,
+                            duration = duration,
+                            onSeekStart = {
+                                isSeeking = true
+                                seekPosition = it
+                            },
+                            onSeekChanged = { seekPosition = it },
+                            onSeekEnd = {
+                                isSeeking = false
+                                val targetMs = (it * duration).toLong()
+                                player.seekTo(targetMs)
+                            }
+                        )
                         Spacer(modifier = Modifier.height(tokens.spacing.sm))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             // 上一集/播放/下一集
-                            IconButton(onClick = { /* 上一集 */ }) {
-                                Icon(TVBoxIcons.Outlined.SkipPrevious, null, tint = Color.White)
+                            IconButton(
+                                onClick = { prevEpisode() },
+                                enabled = currentEpisodeIndex > 0
+                            ) {
+                                Icon(
+                                    TVBoxIcons.Outlined.SkipPrevious, null,
+                                    tint = if (currentEpisodeIndex > 0) Color.White
+                                           else Color.White.copy(alpha = 0.4f)
+                                )
                             }
-                            IconButton(onClick = { isPlaying = !isPlaying }, modifier = Modifier.size(64.dp)) {
+                            IconButton(
+                                onClick = { if (isPlaying) player.pause() else player.play() },
+                                modifier = Modifier.size(64.dp),
+                                enabled = !resolving && resolvedUrl.isNotBlank()
+                            ) {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
@@ -809,13 +959,20 @@ fun PlayerScreen(
                                     )
                                 }
                             }
-                            IconButton(onClick = { /* 下一集 */ }) {
-                                Icon(TVBoxIcons.Outlined.SkipNext, null, tint = Color.White)
+                            IconButton(
+                                onClick = { nextEpisode() },
+                                enabled = currentEpisodeIndex < episodes.size - 1
+                            ) {
+                                Icon(
+                                    TVBoxIcons.Outlined.SkipNext, null,
+                                    tint = if (currentEpisodeIndex < episodes.size - 1) Color.White
+                                           else Color.White.copy(alpha = 0.4f)
+                                )
                             }
                             Spacer(modifier = Modifier.width(tokens.spacing.md))
                             // 时间
                             Text(
-                                formatMs(position),
+                                formatMs(if (isSeeking) (seekPosition * duration).toLong() else position),
                                 style = MaterialTheme.typography.labelLarge,
                                 color = Color.White
                             )
@@ -827,26 +984,16 @@ fun PlayerScreen(
                                 color = Color.White.copy(alpha = 0.8f)
                             )
                             Spacer(modifier = Modifier.weight(1f))
-                            // 音量
-                            Icon(TVBoxIcons.Outlined.VolumeUp, null,
-                                tint = Color.White,
-                                modifier = Modifier.size(tokens.size.iconMd))
-                            Spacer(modifier = Modifier.width(tokens.spacing.xs))
-                            Box(
-                                modifier = Modifier
-                                    .width(100.dp)
-                                    .height(4.dp)
-                                    .clip(RoundedCornerShape(2.dp))
-                                    .background(Color.White.copy(alpha = 0.25f))
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth(volume / 100f)
-                                        .height(4.dp)
-                                        .background(MaterialTheme.colorScheme.primary)
+                            // 倍速
+                            TextButton(onClick = { panel = if (panel == "speed") "none" else "speed" }) {
+                                Text(
+                                    "${speed}x",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = Color.White
                                 )
                             }
-                            Spacer(modifier = Modifier.width(tokens.spacing.md))
+                            Spacer(modifier = Modifier.width(tokens.spacing.sm))
+                            // 选集
                             TextButton(onClick = { panel = if (panel == "episodes") "none" else "episodes" }) {
                                 Icon(TVBoxIcons.Outlined.List, null,
                                     tint = Color.White,
@@ -856,13 +1003,22 @@ fun PlayerScreen(
                                     color = Color.White)
                             }
                             Spacer(modifier = Modifier.width(tokens.spacing.sm))
-                            TextButton(onClick = { panel = if (panel == "tracks") "none" else "tracks" }) {
-                                Icon(TVBoxIcons.Outlined.ClosedCaption, null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(tokens.size.iconSm))
-                                Spacer(modifier = Modifier.width(tokens.spacing.xs))
-                                Text("音轨/字幕", style = MaterialTheme.typography.labelLarge,
-                                    color = Color.White)
+                            // 投屏
+                            IconButton(onClick = {
+                                runCatching {
+                                    deviceApi.castVideo(resolvedUrl, vodInfo.vodName)
+                                }
+                            }) {
+                                Icon(TVBoxIcons.Outlined.Share, null, tint = Color.White)
+                            }
+                            Spacer(modifier = Modifier.width(tokens.spacing.sm))
+                            // 全屏
+                            IconButton(onClick = { toggleFullscreen() }) {
+                                Icon(
+                                    if (isFullscreen) TVBoxIcons.Outlined.FullscreenExit
+                                    else TVBoxIcons.Outlined.Fullscreen,
+                                    null, tint = Color.White
+                                )
                             }
                         }
                     }
@@ -886,6 +1042,51 @@ fun PlayerScreen(
                         selectedId = episode.episodeId,
                         onClick = onEpisodeChange
                     )
+                }
+            }
+        }
+
+        // 倍速选择面板
+        if (panel == "speed") {
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = tokens.elevation.sm,
+                modifier = Modifier.fillMaxWidth().weight(1f)
+            ) {
+                Column(modifier = Modifier.padding(tokens.spacing.lg)) {
+                    SectionHeader(title = "播放速度")
+                    Spacer(modifier = Modifier.height(tokens.spacing.sm))
+                    val speedList = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+                    speedList.forEach { s ->
+                        val selected = speed == s
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(MaterialTheme.shapes.medium)
+                                .clickable { changeSpeed(s) }
+                                .padding(
+                                    horizontal = tokens.spacing.md,
+                                    vertical = tokens.spacing.sm
+                                ),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "${s}x",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (selected) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            if (selected) {
+                                Icon(
+                                    TVBoxIcons.Outlined.Check,
+                                    null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(tokens.spacing.xs))
+                    }
                 }
             }
         }
@@ -920,39 +1121,47 @@ fun PlayerScreen(
 }
 
 @Composable
-private fun PlayerProgressBar(progress: Float) {
+private fun PlayerProgressBar(
+    progress: Float,
+    duration: Long = 0L,
+    onSeekStart: (Float) -> Unit = {},
+    onSeekChanged: (Float) -> Unit = {},
+    onSeekEnd: (Float) -> Unit = {}
+) {
     val tokens = tvTokens()
-    Box(
+    val progressPct = progress.coerceIn(0f, 1f)
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(6.dp)
             .clip(RoundedCornerShape(3.dp))
-            .background(Color.White.copy(alpha = 0.25f))
+            .background(Color.White.copy(alpha = 0.25f)),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(progress.coerceIn(0f, 1f))
-                    .height(6.dp)
-                    .background(MaterialTheme.colorScheme.primary)
-            )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(progressPct)
+                .height(6.dp)
+                .background(MaterialTheme.colorScheme.primary)
+        )
+        if (progressPct > 0f && progressPct < 1f) {
             Box(
                 modifier = Modifier
                     .size(12.dp)
-                    .offset(x = (-1).dp, y = (-3).dp)
+                    .offset(x = (-6).dp)
                     .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.primary)
+                    .background(Color.White)
             )
         }
     }
 }
 
-private fun formatMs(ms: Int): String {
+private fun formatMs(ms: Long): String {
     val total = ms / 1000
     val h = total / 3600
     val m = (total % 3600) / 60
     val s = total % 60
-    fun pad2(n: Int) = if (n < 10) "0$n" else n.toString()
+    fun pad2(n: Long) = if (n < 10) "0$n" else n.toString()
     return if (h > 0) "$h:${pad2(m)}:${pad2(s)}" else "${pad2(m)}:${pad2(s)}"
 }
 

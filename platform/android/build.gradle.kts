@@ -17,6 +17,13 @@ kotlin {
                 implementation(libs.media3.ui)
                 implementation(libs.media3.hls)
                 implementation(libs.okhttp)
+                // Gson（Jar 爬虫依赖的 JSON 库）
+                implementation(libs.gson)
+                // QuickJS 引擎（JS 爬虫运行时）
+                implementation(libs.quickjs.wrapper.android)
+                implementation(libs.quickjs.wrapper.java)
+                // JSoup（HTML 解析，JS 爬虫 pdfa/pdfh 辅助）
+                implementation(libs.jsoup)
             }
         }
     }

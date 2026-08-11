@@ -9,12 +9,19 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Error
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.InsertLink
 import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.LiveTv
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.material.icons.outlined.Movie
+import androidx.compose.material.icons.outlined.NotInterested
+import androidx.compose.material.icons.outlined.Pets
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
@@ -32,6 +39,7 @@ import androidx.compose.material.icons.filled.Source
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Close
@@ -55,6 +63,10 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.InsertLink
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Pets
 
 /**
  * TVBox 图标中心，聚合 Material Icons 统一引用。
@@ -79,10 +91,16 @@ object OutlinedIcons {
     val Edit = Icons.Outlined.Edit
     val Favorite = Icons.Outlined.Favorite
     val FavoriteBorder = Icons.Outlined.FavoriteBorder
+    val Folder = Icons.Outlined.Folder
     val Info = Icons.Outlined.Info
+    val InsertLink = Icons.Outlined.InsertLink
     val Language = Icons.Outlined.Language
+    val LiveTv = Icons.Outlined.LiveTv
     val Lightbulb = Icons.Outlined.Lightbulb
     val Menu = Icons.Outlined.Menu
+    val Movie = Icons.Outlined.Movie
+    val NotInterested = Icons.Outlined.NotInterested
+    val Pets = Icons.Outlined.Pets
     val PlayArrow = Icons.Outlined.PlayArrow
     val Share = Icons.Outlined.Share
     val Source = Icons.Outlined.Source
@@ -98,6 +116,7 @@ object OutlinedIcons {
     val Tune = Icons.Outlined.Tune
     val Visibility = Icons.Outlined.Visibility
     val Pause = Icons.Outlined.Pause
+    val Refresh = Icons.Outlined.Refresh
     val SkipNext = Icons.Outlined.SkipNext
     val SkipPrevious = Icons.Outlined.SkipPrevious
     val Fullscreen = Icons.Outlined.Fullscreen
@@ -115,6 +134,7 @@ object FilledIcons {
     val Settings = Icons.Filled.Settings
     val Star = Icons.Filled.Star
     val PlayArrow = Icons.Filled.PlayArrow
+    val LiveTv = Icons.Filled.LiveTv
     val Add = Icons.Filled.Add
     val Delete = Icons.Filled.Delete
     val Close = Icons.Filled.Close
@@ -126,4 +146,8 @@ object FilledIcons {
     val SkipPrevious = Icons.Filled.SkipPrevious
     val Fullscreen = Icons.Filled.Fullscreen
     val VolumeUp = Icons.Filled.VolumeUp
+    val Folder = Icons.Filled.Folder
+    val InsertLink = Icons.Filled.InsertLink
+    val Movie = Icons.Filled.Movie
+    val Pets = Icons.Filled.Pets
 }
