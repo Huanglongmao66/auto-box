@@ -1,0 +1,398 @@
+name: Build All Platforms
+
+on:
+  push:
+    branches: [main, dev]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: '构建平台 (all/android/desktop/web/linux-tv)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - android
+          - desktop
+          - web
+          - linux-tv
+
+env:
+  GRADLE_OPTS: '-Xmx4096M -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8'
+  JAVA_VERSION: '17'
+  JAVA_DISTRIBUTION: 'temurin'
+
+jobs:
+  # ===== 预处理：解析构建平台 =====
+  prepare:
+    name: Prepare Build Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      build_android: ${{ steps.parse.outputs.build_android }}
+      build_desktop: ${{ steps.parse.outputs.build_desktop }}
+      build_web: ${{ steps.parse.outputs.build_web }}
+      build_linux_tv: ${{ steps.parse.outputs.build_linux_tv }}
+    steps:
+      - id: parse
+        run: |
+          PLATFORM="${{ github.event.inputs.platform || 'all' }}"
+          echo "Requested platform: $PLATFORM"
+          case "$PLATFORM" in
+            all)
+              echo "build_android=true"  >> $GITHUB_OUTPUT
+              echo "build_desktop=true"  >> $GITHUB_OUTPUT
+              echo "build_web=true"      >> $GITHUB_OUTPUT
+              echo "build_linux_tv=true" >> $GITHUB_OUTPUT
+              ;;
+            android)
+              echo "build_android=true"  >> $GITHUB_OUTPUT
+              echo "build_desktop=false" >> $GITHUB_OUTPUT
+              echo "build_web=false"     >> $GITHUB_OUTPUT
+              echo "build_linux_tv=false">> $GITHUB_OUTPUT
+              ;;
+            desktop)
+              echo "build_android=false" >> $GITHUB_OUTPUT
+              echo "build_desktop=true"  >> $GITHUB_OUTPUT
+              echo "build_web=false"     >> $GITHUB_OUTPUT
+              echo "build_linux_tv=false">> $GITHUB_OUTPUT
+              ;;
+            web)
+              echo "build_android=false" >> $GITHUB_OUTPUT
+              echo "build_desktop=false" >> $GITHUB_OUTPUT
+              echo "build_web=true"      >> $GITHUB_OUTPUT
+              echo "build_linux_tv=false">> $GITHUB_OUTPUT
+              ;;
+            linux-tv)
+              echo "build_android=false" >> $GITHUB_OUTPUT
+              echo "build_desktop=false" >> $GITHUB_OUTPUT
+              echo "build_web=false"     >> $GITHUB_OUTPUT
+              echo "build_linux_tv=true" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+  # ===== Android APK 构建 =====
+  build-android:
+    name: Build Android APK
+    needs: prepare
+    if: needs.prepare.outputs.build_android == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.4'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Android Debug APK
+        run: ./gradlew :app:app-android:assembleDebug --no-daemon --stacktrace
+
+      - name: Build Android Release APK
+        run: ./gradlew :app:app-android:assembleRelease --no-daemon --stacktrace
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: tvbox-android-apk
+          path: |
+            app/app-android/build/outputs/apk/debug/*.apk
+            app/app-android/build/outputs/apk/release/*.apk
+          retention-days: 30
+
+  # ===== Desktop (Windows/macOS/Linux) 构建 =====
+  build-desktop:
+    name: Build Desktop (${{ matrix.label }})
+    needs: prepare
+    if: needs.prepare.outputs.build_desktop == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: Linux
+          - os: windows-latest
+            label: Windows
+          - os: macos-latest
+            label: macOS
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.4'
+
+      - name: Grant execute permission for gradlew (Unix)
+        if: runner.os != 'Windows'
+        run: chmod +x gradlew
+
+      - name: Build Desktop Distribution
+        shell: bash
+        run: ./gradlew :app:app-desktop:packageDistributionForCurrentOS --no-daemon --stacktrace
+
+      - name: Upload Desktop Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tvbox-desktop-${{ matrix.label }}
+          path: |
+            app/app-desktop/build/compose/binaries/main/deb/*.deb
+            app/app-desktop/build/compose/binaries/main/msi/*.msi
+            app/app-desktop/build/compose/binaries/main/dmg/*.dmg
+            app/app-desktop/build/compose/binaries/main/exe/*.exe
+            app/app-desktop/build/compose/binaries/main/pkg/*.pkg
+          retention-days: 30
+          if-no-files-found: warn
+
+  # ===== Web 静态资源构建 =====
+  build-web:
+    name: Build Web (JS)
+    needs: prepare
+    if: needs.prepare.outputs.build_web == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.4'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Web Bundle
+        run: ./gradlew :app:app-web:jsBrowserProductionWebpack --no-daemon --stacktrace
+
+      - name: Locate & Package Web into ZIP
+        run: |
+          # Kotlin Multiplatform + Compose Web 的 webpack 输出目录可能位于多个位置
+          # 1) 先打印整个 build 目录结构用于调试（只显示目录 + *.html / *.js 文件）
+          echo "==== 构建后 app/app-web/build 中 *.html 文件 ===="
+          find app/app-web/build -name "*.html" -type f -print 2>/dev/null || true
+          echo "==== 构建后 build 下的目录结构（深度<=6） ===="
+          find app/app-web/build -maxdepth 6 -type d 2>/dev/null || true
+          # 2) 优先找包含 index.html 的目录，选修改时间最新的
+          TARGET=""
+          INDEXES=$(find app/app-web/build -name "index.html" -type f -print 2>/dev/null)
+          if [ -n "$INDEXES" ]; then
+            TARGET=$(ls -1t $INDEXES 2>/dev/null | head -1 | xargs -I{} dirname {})
+          fi
+          # 3) 如果没有 index.html，回退到候选列表中第一个存在且非空的目录
+          if [ -z "$TARGET" ]; then
+            CANDIDATES=(
+              "app/app-web/build/kotlin-webpack/js/productionExecutable"
+              "app/app-web/build/dist/js/productionExecutable"
+              "app/app-web/build/webpack/main/productionExecutable"
+              "app/app-web/build/dist/js/productionExecutable/webpack"
+              "app/app-web/build/dist/webpack"
+            )
+            for d in "${CANDIDATES[@]}"; do
+              if [ -d "$d" ] && [ -n "$(ls -A "$d" 2>/dev/null)" ]; then
+                TARGET="$d"
+                break
+              fi
+            done
+          fi
+          if [ -z "$TARGET" ]; then
+            echo "::error::Cannot find Web build output directory under app/app-web/build"
+            exit 1
+          fi
+          echo "Using Web output directory: $TARGET"
+          ls -la "$TARGET"
+          (cd "$TARGET" && zip -r "${{ github.workspace }}/tvbox-web.zip" .)
+
+      - name: Upload Web Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tvbox-web
+          path: tvbox-web.zip
+          retention-days: 30
+
+  # ===== Linux TV 应用构建 (JVM distribution) =====
+  build-linux-tv:
+    name: Build Linux TV (JVM)
+    needs: prepare
+    if: needs.prepare.outputs.build_linux_tv == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.4'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Linux TV Distribution (ZIP + TAR)
+        run: |
+          # kotlin multiplatform + application 插件组合下，installDist/distZip 有时不会把
+          # jvm 运行时依赖打进 lib 目录。因此这里采用：
+          #   jvmJar 产出主 jar  →  Gradle init-script 把主 jar + jvmRuntimeClasspath 全部拷贝到 full-libs
+          #   → 组装 TVBox/{lib, bin} → 打 zip/tar
+          set -euo pipefail
+
+          ROOT="$PWD"
+          APP="$ROOT/app/app-linux-tv"
+          FULL_LIBS="$APP/build/full-libs"
+          STAGE_ROOT="$APP/build/stage"
+          STAGE="$STAGE_ROOT/TVBox"
+
+          ./gradlew :app:app-linux-tv:jvmJar --no-daemon --stacktrace
+
+          # 把 Gradle init-script 先落地成临时文件（用 Groovy 语法，.init.gradle 兼容性最好），再用 -I 加载
+          INIT_FILE="$(mktemp -p "$RUNNER_TEMP" copydeps-init.gradle.XXXXXX)"
+          cat > "$INIT_FILE" <<'INIT_GROOVY'
+          allprojects {
+              def targetDir = project.hasProperty('targetDir') ? project.getProperty('targetDir') : null
+              if (targetDir != null && project.path == ":app:app-linux-tv") {
+                  tasks.register("copyLinuxTvRuntimeDeps", Copy.class) {
+                      into(file(targetDir))
+                      from(tasks.named("jvmJar"))
+                      from(project.configurations.getByName("jvmRuntimeClasspath"))
+                      duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+                      includeEmptyDirs = false
+                  }
+              }
+          }
+          INIT_GROOVY
+          echo "[init] using init-script: $INIT_FILE"
+
+          mkdir -p "$FULL_LIBS"
+          ./gradlew --no-daemon --stacktrace \
+            -PtargetDir="$FULL_LIBS" \
+            -I "$INIT_FILE" \
+            :app:app-linux-tv:copyLinuxTvRuntimeDeps
+
+          rm -f "$INIT_FILE"
+
+          # 2) 打印 full-libs 信息
+          echo "==== Linux TV full-libs ($(du -sh "$FULL_LIBS" | cut -f1), $(ls -1 "$FULL_LIBS"/*.jar 2>/dev/null | wc -l) jars) ===="
+          ls -lh "$FULL_LIBS" || true
+
+          # 3) 组装 stage/TVBox/{lib, bin}
+          rm -rf "$STAGE_ROOT"
+          mkdir -p "$STAGE/lib" "$STAGE/bin"
+          cp -f "$FULL_LIBS"/*.jar "$STAGE/lib/"
+
+          # 4) 生成启动脚本 bin/TVBox（使用通配符 classpath 所有 jar）
+          cat > "$STAGE/bin/TVBox" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+          exec java -Xmx2G -cp "$DIR/lib/*" com.tvbox.app.linuxtv.MainKt "$@"
+          SH
+          chmod +x "$STAGE/bin/TVBox"
+
+          # 5) 打 zip/tar 到 workspace 根
+          (cd "$STAGE_ROOT" && zip -r "$ROOT/tvbox-linux-tv.zip" "TVBox")
+          tar -cf "$ROOT/tvbox-linux-tv.tar" -C "$STAGE_ROOT" "TVBox"
+
+          # 6) 同时尝试 application 插件的 distZip/distTar 作为备用（能成功就带上）
+          ./gradlew :app:app-linux-tv:distZip :app:app-linux-tv:distTar --no-daemon --stacktrace || true
+
+          echo "==== Linux TV 最终产物 sizes ===="
+          ls -lh "$ROOT"/tvbox-linux-tv.zip "$ROOT"/tvbox-linux-tv.tar
+          ls -lh "$APP"/build/distributions/*.zip "$APP"/build/distributions/*.tar 2>/dev/null || true
+
+      - name: Upload Linux TV Distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: tvbox-linux-tv
+          path: |
+            tvbox-linux-tv.zip
+            tvbox-linux-tv.tar
+            app/app-linux-tv/build/distributions/*.zip
+            app/app-linux-tv/build/distributions/*.tar
+          retention-days: 30
+
+  # ===== 汇总发布 (仅 tag 触发) =====
+  release:
+    name: Publish Release
+    needs: [build-android, build-desktop, build-web, build-linux-tv]
+    if: |
+      always() &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      (needs.build-android.result == 'success' ||
+       needs.build-desktop.result == 'success' ||
+       needs.build-web.result == 'success' ||
+       needs.build-linux-tv.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List Artifacts
+        run: find artifacts -type f | head -80
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: TVBox ${{ github.ref_name }}
+          body: |
+            ## TVBox Multiplatform ${{ github.ref_name }}
+
+            ### 下载说明
+            - **Android**: 安装 `.apk` 文件到 Android TV / 手机 / 平板
+            - **Windows**: 下载 `.msi` 或 `.exe` 安装包运行安装
+            - **macOS**: 下载 `.dmg` 磁盘映像，拖入 Applications
+            - **Linux (Debian/Ubuntu)**: 下载 `.deb` 包，`sudo dpkg -i xxx.deb`
+            - **Web**: 下载 `tvbox-web.zip`，解压后用浏览器打开 `index.html`
+            - **Linux TV / 嵌入式盒子**: 下载 `tvbox-linux-tv-*.zip`，解压后执行 `bin/TVBox`
+
+            ### 构建信息
+            - 构建时间: ${{ github.run_id }}
+            - 提交哈希: ${{ github.sha }}
+            - 工作流: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          files: |
+            artifacts/**/*.apk
+            artifacts/**/*.deb
+            artifacts/**/*.msi
+            artifacts/**/*.dmg
+            artifacts/**/*.exe
+            artifacts/**/*.pkg
+            artifacts/**/tvbox-web.zip
+            artifacts/**/*.zip
+            artifacts/**/*.tar
+          draft: false
+          prerelease: false
