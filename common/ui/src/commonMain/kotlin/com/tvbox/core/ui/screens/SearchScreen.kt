@@ -34,7 +34,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.tvbox.core.di.ServiceLocator
 import com.tvbox.core.model.VodInfo
 import com.tvbox.core.ui.components.Badge
 import com.tvbox.core.ui.components.EmptyView
@@ -55,6 +58,10 @@ import com.tvbox.core.ui.components.VodGrid
 import com.tvbox.core.ui.icons.TVBoxIcons
 import com.tvbox.core.ui.mock.MockData
 import com.tvbox.core.ui.theme.tvTokens
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flow
 
 // ================= 搜索页 =================
 
@@ -65,25 +72,33 @@ fun SearchScreen(
 ) {
     val tokens = tvTokens()
     var query by remember { mutableStateOf("") }
+    var searching by remember { mutableStateOf(false) }
+    val realResults = remember { mutableStateListOf<VodInfo>() }
     val recentSearch = remember { mutableStateListOf("长安忆", "剑与魔法之书", "暗夜法官") }
     val hotKeywords = MockData.hotKeywords
     val categories = MockData.categories
     var selectedCategories by remember { mutableStateOf(emptyList<String>()) }
     val showResults = query.isNotEmpty()
 
+    // 400ms 防抖搜索
+    LaunchedEffect(query) {
+        if (query.isBlank()) {
+            realResults.clear()
+            return@LaunchedEffect
+        }
+        searching = true
+        delay(400)
+        val repo = runCatching { ServiceLocator.getVodRepository() }.getOrNull()
+        val results = repo?.runCatching { searchContent(query, 1) }?.getOrNull().orEmpty()
+        realResults.clear()
+        realResults.addAll(results)
+        searching = false
+    }
+
     // 基于分类过滤的逻辑
     fun filterByCategories(items: List<VodInfo>): List<VodInfo> {
         if (selectedCategories.isEmpty()) return items
-        return items.filter { vod ->
-            val source = when {
-                vod in MockData.movieList -> "电影"
-                vod in MockData.dramaList -> "电视剧"
-                vod in MockData.animeList -> "动漫"
-                vod in MockData.trending -> "电影" // trending 混合，默认归入电影
-                else -> null
-            }
-            source != null && source in selectedCategories
-        }
+        return items.filter { vod -> selectedCategories.any { c -> c in vod.vodClass } }
     }
 
     androidx.compose.foundation.lazy.LazyColumn(
@@ -123,9 +138,10 @@ fun SearchScreen(
             // 结果列表
             item {
                 Column {
-                    val allResultsRaw = (MockData.movieList + MockData.dramaList + MockData.animeList)
+                    val allResultsRaw = if (realResults.isNotEmpty()) realResults.toList()
+                    else (MockData.movieList + MockData.dramaList + MockData.animeList)
                         .filter {
-                            query.isBlank() || it.vodName.contains(query, ignoreCase = true)
+                            it.vodName.contains(query, ignoreCase = true)
                                 || it.vodActor.orEmpty().contains(query, ignoreCase = true)
                                 || it.vodDirector.orEmpty().contains(query, ignoreCase = true)
                         }

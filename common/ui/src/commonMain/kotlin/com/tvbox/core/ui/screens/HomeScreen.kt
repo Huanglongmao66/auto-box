@@ -53,6 +53,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.tvbox.core.di.ServiceLocator
+import com.tvbox.core.model.VodClass
 import com.tvbox.core.model.VodInfo
 import com.tvbox.core.ui.components.Badge
 import com.tvbox.core.ui.components.PosterPlaceholder
@@ -77,10 +79,25 @@ fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     val tokens = tvTokens()
-    val categories = MockData.categories
+    var homeContent by remember { mutableStateOf<com.tvbox.core.source.HomeContent?>(null) }
+    var loading by remember { mutableStateOf(false) }
+    val refreshKey = remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(refreshKey.intValue) {
+        loading = true
+        val repo = runCatching { ServiceLocator.getVodRepository() }.getOrNull()
+        homeContent = repo?.runCatching { getHomeContent() }?.getOrNull()
+        loading = false
+    }
+
+    val categories: List<VodClass> = homeContent?.categories?.takeIf { it.isNotEmpty() } ?: MockData.categories
     var selectedCategoryIndex by remember { mutableIntStateOf(0) }
     var showFullRanking by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+
+    val banners: List<VodInfo> = homeContent?.list?.takeIf { it.isNotEmpty() }?.take(6) ?: MockData.homeBanner
+    val recommendList: List<VodInfo> = homeContent?.list?.takeIf { it.isNotEmpty() } ?: (MockData.trending + MockData.movieList)
+    val trending: List<VodInfo> = homeContent?.list?.takeIf { it.isNotEmpty() }?.take(10) ?: MockData.trending
 
     androidx.compose.foundation.lazy.LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -96,7 +113,7 @@ fun HomeScreen(
         // === 精选 Banner ===
         item {
             HomeBanner(
-                items = MockData.homeBanner,
+                items = banners,
                 onClick = onVodClick
             )
         }
@@ -113,10 +130,11 @@ fun HomeScreen(
         // === 当前分类推荐 ===
         item {
             val currentName = categories[selectedCategoryIndex].typeName
-            val data = when (currentName) {
-                "电影" -> MockData.movieList
-                "电视剧" -> MockData.dramaList
-                "动漫" -> MockData.animeList
+            val data = when {
+                recommendList.isNotEmpty() -> recommendList
+                currentName == "电影" -> MockData.movieList
+                currentName == "电视剧" -> MockData.dramaList
+                currentName == "动漫" -> MockData.animeList
                 else -> MockData.trending + MockData.movieList.take(4)
             }
             Column {
@@ -140,7 +158,7 @@ fun HomeScreen(
                 )
                 Spacer(modifier = Modifier.height(tokens.spacing.sm))
                 RankingRow(
-                    items = if (showFullRanking) MockData.trending else MockData.trending.take(5),
+                    items = if (showFullRanking) trending else trending.take(5),
                     onClick = onVodClick
                 )
             }
@@ -159,7 +177,7 @@ fun HomeScreen(
                         else -> 3
                     }
                     VodGrid(
-                        items = MockData.trending + MockData.movieList,
+                        items = recommendList.ifEmpty { MockData.trending + MockData.movieList },
                         columns = cols,
                         onClick = onVodClick,
                         contentPadding = PaddingValues(0.dp),

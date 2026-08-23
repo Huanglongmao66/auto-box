@@ -40,6 +40,8 @@ data class MovieSource(
     val js: String = "",
     /** 站点头信息 */
     val header: String = "",
+    /** 播放解析接口（可选）：非直链地址通过此接口二次跳转获取真实 URL */
+    val playerUrl: String = "",
     /** 站点超时时间（毫秒） */
     val timeout: Int = 15000,
     /** 排序权重 */
