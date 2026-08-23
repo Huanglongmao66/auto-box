@@ -130,7 +130,7 @@ internal object TvboxJsonResponseParser {
         val root = JsonUtils.parseToJsonElement(json) as? JsonObject ?: return ""
         root.safeString("url")?.takeIf { it.isNotBlank() }?.let { return it }
         root.safeString("parse_url")?.takeIf { it.isNotBlank() }?.let { return it }
-        (root["parse") as? JsonPrimitive)?.let { p ->
+        (root["parse"] as? JsonPrimitive)?.let { p ->
             val v = p.safeStringValue()
             if (v.isNotBlank()) return v
         }

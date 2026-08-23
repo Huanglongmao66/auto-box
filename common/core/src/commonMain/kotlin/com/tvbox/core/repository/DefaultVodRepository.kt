@@ -44,7 +44,9 @@ class DefaultVodRepository(
         val categorySet = linkedMapOf<String, VodClass>()
         results.forEach { hc ->
             hc.categories.forEach { c ->
-                categorySet.putIfAbsent(c.typeId, c)
+                if (!categorySet.containsKey(c.typeId)) {
+                    categorySet[c.typeId] = c
+                }
             }
         }
         cachedCategories = categorySet.values.toList()
