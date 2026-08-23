@@ -595,7 +595,7 @@ fun PlayerScreen(
                 )
                 Spacer(modifier = Modifier.height(tokens.spacing.md))
                 Text(
-                    text = detail.vodName,
+                    text = vodInfo.vodName,
                     style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
                     color = Color.White
                 )
@@ -630,7 +630,7 @@ fun PlayerScreen(
                         }
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                detail.vodName,
+                                vodInfo.vodName,
                                 style = MaterialTheme.typography.titleMedium,
                                 color = Color.White
                             )
@@ -753,7 +753,7 @@ fun PlayerScreen(
 
         // 选集面板
         if (panel == "episodes") {
-            val episodes = detail.episodes.ifEmpty { MockData.sampleVodDetail().episodes }
+            val episodes = vodInfo.episodes.ifEmpty { MockData.sampleVodDetail().episodes }
             Surface(
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = tokens.elevation.sm,
