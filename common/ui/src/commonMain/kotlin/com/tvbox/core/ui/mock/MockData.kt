@@ -26,7 +26,7 @@ object MockData {
             logo = "",
             desc = "高清4K资源站，更新速度快",
             order = 1,
-            lastUpdate = System.currentTimeMillis() - 3600_000
+            lastUpdate = 1710000000000L
         ),
         MovieSource(
             key = "csp_yszy",
