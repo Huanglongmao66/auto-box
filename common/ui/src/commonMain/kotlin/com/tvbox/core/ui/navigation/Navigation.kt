@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -160,7 +161,7 @@ fun AppScaffold(
                                 Text(
                                     "TVBox",
                                     style = MaterialTheme.typography.titleLarge.copy(
-                                        androidx.compose.ui.text.font.FontWeight.Bold
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                                     ),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -184,7 +185,7 @@ fun AppScaffold(
                                     Text(
                                         text = tab.title,
                                         style = if (selected) MaterialTheme.typography.titleSmall.copy(
-                                            androidx.compose.ui.text.font.FontWeight.SemiBold
+                                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
                                         ) else MaterialTheme.typography.titleSmall
                                     )
                                 },
@@ -242,7 +243,7 @@ fun AppScaffold(
                         CenterAlignedTopAppBar(
                             title = title,
                             navigationIcon = navigationIcon,
-                            actions = actions,
+                            actions = { actions() },
                             scrollBehavior = topBarBehavior,
                             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                                 containerColor = Color.Transparent,
@@ -255,7 +256,7 @@ fun AppScaffold(
                         CenterAlignedTopAppBar(
                             title = title,
                             navigationIcon = navigationIcon,
-                            actions = actions,
+                            actions = { actions() },
                             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                                 containerColor = Color.Transparent,
                                 titleContentColor = MaterialTheme.colorScheme.onSurface,

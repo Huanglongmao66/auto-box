@@ -3,6 +3,7 @@ package com.tvbox.core.ui.screens
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -158,7 +160,7 @@ fun HomeScreen(
                         columns = cols,
                         onClick = onVodClick,
                         contentPadding = PaddingValues(0.dp)
-                    ) { }
+                    )
                 }
             }
         }
@@ -505,7 +507,7 @@ fun FavoritesScreen(
                     columns = cols,
                     onClick = onVodClick,
                     contentPadding = PaddingValues(0.dp)
-                ) { }
+                )
             }
         }
         item {
@@ -583,4 +585,4 @@ private fun Modifier.clickableSafe(onClick: () -> Unit): Modifier =
 
 // 直接内联 clickable，防止不同平台报错
 private fun Modifier.clickableSafeImpl(onClick: () -> Unit): Modifier =
-    androidx.compose.foundation.clickable(onClick = onClick)
+    this.clickable(onClick = onClick)
